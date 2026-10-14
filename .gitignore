@@ -1,0 +1,22 @@
+# Build intermediates
+build/obj/
+build/Release/
+build/Debug/
+plugin/build/obj/
+plugin/build/Release/
+plugin/build/Debug/
+*.user
+*.sdf
+*.suo
+*.ipch
+
+# PC layout preview output
+tools/preview/out/
+
+# Release files go on GitHub Releases, not in the repo
+dist/
+
+# Not published
+Todo.txt
+MODLOG.md
+ControllerExample.png

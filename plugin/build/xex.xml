@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- System plugin, built like XeniaLink (see its MODLOG):
+     - linked at 0x98000000, then tools/pe_4k_align.py marks the DLL 4 KB-aligned (build_plugin.bat)
+     - <sysdll/> = "exports to title | DLL module"
+     - loaded at 0x91E80000 (system memory, 4 KB pages): after XeniaLink (0x91E00000-0x91E35000),
+       below DashLaunch (0x91F00000), clear of xbdm, HvP2, Proto, JRPC2 and RPC. -->
+<xex>
+  <sysdll/>
+  <baseaddr addr="0x91E80000"/>
+  <format>
+    <compressed/>
+  </format>
+  <mediatypes>
+    <harddisk/>
+    <livepackage/>
+    <signedpackage/>
+  </mediatypes>
+</xex>

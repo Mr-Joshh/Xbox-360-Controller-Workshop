@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<!-- Title XEX settings. 0xFFFF0C70 is a made-up homebrew title ID (FFFF0055 is Aurora). -->
+<xex>
+  <titleid id="0xFFFF0C70"/>
+</xex>
