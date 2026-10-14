@@ -42,9 +42,9 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
 
 ## Requirements
 
-- An RGH or JTAG Xbox 360 that runs unsigned code (dev-kit-signed XEXs, as built by the XDK).
+- An RGH or JTAG Xbox 360 that runs unsigned code (dev-kit-signed XEXs, as built by the SDK).
 - **DashLaunch** for the button remapper (the plugin loads through it). The tester works without it.
-- To build from source: Visual Studio 2010 and the Xbox 360 XDK (tested with 21256). Neither is
+- To build from source: Visual Studio 2010 and the Xbox 360 SDK (tested with 21256). Neither is
   included in this repository.
 
 ## Install
@@ -190,8 +190,8 @@ out keep their normal function.
 
 ## Building from source
 
-You need Visual Studio 2010 and the Xbox 360 XDK installed (default paths), plus Python 3 for the
-plugin build. The XDK is not included and isn't needed to use the release files.
+You need Visual Studio 2010 and the Xbox 360 SDK installed (default paths), plus Python 3 for the
+plugin build. The SDK is not included and isn't needed to use the release files.
 Builds go to `dist\ControllerWorkshop\` (not part of the repository).
 
 | What | Command | Output |
