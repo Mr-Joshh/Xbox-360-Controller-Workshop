@@ -269,8 +269,12 @@ namespace
         R::Text(x + w / 2, y + 38, 1, COL_DIM, ALIGN_CENTER,
                 active ? "Press anything. Hold BACK for 1 second to stop." : "Press Y to try this layout with every button.");
 
+        // Only live while trying the layout; while editing, the pad is busy navigating the list.
         XINPUT_GAMEPAD out = cur.Gamepad;
-        Remap_Apply(&g_Edit, &out);
+        if (active)
+            Remap_Apply(&g_Edit, &out);
+        else
+            memset(&out, 0, sizeof(out));
 
         // Output buttons, 4 x 4
         for (int i = 0; i < IN_COUNT; i++)

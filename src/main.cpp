@@ -104,9 +104,7 @@ static char  g_Toast[96];
 static float g_ToastTime = 0.0f;
 
 // Rumble test
-static float g_RumbleTimer = 0.0f;       // > 0 while a timed preset is running
 static float g_RumbleL = 0.0f, g_RumbleR = 0.0f;
-static bool  g_Pulse = false;
 
 // Drift test
 static float g_DriftTimer = 0.0f;
@@ -278,8 +276,10 @@ static void UpdateStats(PadState& p)
         {
             float a = atan2f(y, x);
             int sec = (int)((a + PI) / (2 * PI) * SECTORS) % SECTORS;
-            if (mag > st.reach[sec])
-                st.reach[sec] = mag;
+            // The square gate reports past full scale on the diagonals; the edge counts as 100%.
+            float m = mag > 1.0f ? 1.0f : mag;
+            if (m > st.reach[sec])
+                st.reach[sec] = m;
         }
         st.trailHead = (st.trailHead + 1) % TRAIL;
         st.trailX[st.trailHead] = x;
@@ -292,7 +292,7 @@ static void UpdateStats(PadState& p)
 //--------------------------------------------------------------------------------------
 enum MenuItem
 {
-    MI_RESUME, MI_PORT, MI_RUMBLE, MI_DRIFT, MI_REMAP, MI_THEME, MI_RESET, MI_EXIT, MI_COUNT
+    MI_PORT, MI_RUMBLE, MI_DRIFT, MI_REMAP, MI_THEME, MI_RESET, MI_EXIT, MI_COUNT
 };
 
 // Next port choice in direction 'dir' (+1/-1): Auto (-1) or a port with a controller connected.
@@ -372,12 +372,9 @@ static void UpdateMenu(PadState& p, float dt)
     {
         switch (g_MenuSel)
         {
-        case MI_RESUME: g_Mode = MODE_TEST; break;
         case MI_PORT:   g_PortChoice = NextPortChoice(g_PortChoice, 1); break;
         case MI_RUMBLE:
             g_Mode = MODE_RUMBLE;
-            g_RumbleTimer = 0;
-            g_Pulse = false;
             break;
         case MI_DRIFT:  StartDriftTest(); break;
         case MI_THEME:
@@ -412,30 +409,9 @@ static void UpdateRumble(int port, PadState& p, float dt)
         g_Mode = MODE_MENU;
         return;
     }
-    if (Pressed(p, XINPUT_GAMEPAD_A)) { g_RumbleTimer = 1.0f; g_RumbleL = 1; g_RumbleR = 1; g_Pulse = false; }
-    if (Pressed(p, XINPUT_GAMEPAD_X)) { g_RumbleTimer = 1.0f; g_RumbleL = 1; g_RumbleR = 0; g_Pulse = false; }
-    if (Pressed(p, XINPUT_GAMEPAD_Y)) { g_RumbleTimer = 1.0f; g_RumbleL = 0; g_RumbleR = 1; g_Pulse = false; }
-    if (Pressed(p, XINPUT_GAMEPAD_RIGHT_SHOULDER)) { g_Pulse = !g_Pulse; g_RumbleTimer = 0; }
-
-    float l, r;
-    if (g_RumbleTimer > 0)
-    {
-        g_RumbleTimer -= dt;
-        l = g_RumbleL;
-        r = g_RumbleR;
-    }
-    else if (g_Pulse)
-    {
-        // Alternate left/right every half second.
-        bool left = fmodf(g_Time, 1.0f) < 0.5f;
-        l = left ? 1.0f : 0.0f;
-        r = left ? 0.0f : 1.0f;
-    }
-    else
-    {
-        l = p.state.Gamepad.bLeftTrigger / 255.0f;
-        r = p.state.Gamepad.bRightTrigger / 255.0f;
-    }
+    // LT drives the left motor, RT the right one.
+    float l = p.state.Gamepad.bLeftTrigger / 255.0f;
+    float r = p.state.Gamepad.bRightTrigger / 255.0f;
     g_RumbleL = l;
     g_RumbleR = r;
     SetRumble(port, l, r);
@@ -509,7 +485,7 @@ static DWORD Dim(DWORD c)
     return R::Lerp(c, g_Theme->dimTarget, g_Theme->dimAmount);
 }
 
-// The controller art was traced from a 1280x916 reference image (not included; see tools/trace_outline.py)
+// The controller art was traced from a 1280x916 reference image (not included)
 // and drawn at this scale, centered on x = 640 with the image's top at y = 200.
 const float PAD_SCALE = 0.38f;
 const float PAD_TOP = 200.0f;
@@ -782,7 +758,6 @@ static void DrawStickPanel(float left, const char* title, const PadState& p, int
     StickXY(p.state, k, x, y);
     SHORT rawX = k == 0 ? p.state.Gamepad.sThumbLX : p.state.Gamepad.sThumbRX;
     SHORT rawY = k == 0 ? p.state.Gamepad.sThumbLY : p.state.Gamepad.sThumbRY;
-    float mag = sqrtf(x * x + y * y);
 
     R::RoundRect(left, 86, 320, 476, 14, COL_PANEL);
     R::Text(cx, 96, 2, COL_TEXT, ALIGN_CENTER, title);
@@ -798,29 +773,25 @@ static void DrawStickPanel(float left, const char* title, const PadState& p, int
             sum += st.reach[i];
             if (st.reach[i] < low) low = st.reach[i];
         }
-    R::Textf(cx, 344, 1, COL_DIM, ALIGN_CENTER, "reached %d of %d directions", visited, SECTORS);
 
-    // Each line is at most 17 characters so it fits the panel at 16px per character.
+    // Each line is at most 18 characters so it fits the panel (320 px, text from +18) at 16px per character.
     float tx = left + 18, ty = 362, lh = 20;
     R::Textf(tx, ty, 2, COL_TEXT, ALIGN_LEFT, "X %+6d %+6.1f%%", rawX, x * 100);
     R::Textf(tx, ty + lh, 2, COL_TEXT, ALIGN_LEFT, "Y %+6d %+6.1f%%", rawY, y * 100);
-    float ang = atan2f(y, x) * 180 / PI;
-    if (ang < 0) ang += 360;
-    R::Textf(tx, ty + lh * 2, 2, COL_DIM, ALIGN_LEFT, "Mag %3.0f%% %3.0fdeg", mag * 100, ang);
 
     if (visited == 0)
-        R::Text(tx, ty + lh * 3, 2, COL_CYAN, ALIGN_LEFT, "Spin for reach");
+        R::Text(tx, ty + lh * 2, 2, COL_CYAN, ALIGN_LEFT, "Spin for reach");
     else
-        R::Textf(tx, ty + lh * 3, 2, COL_CYAN, ALIGN_LEFT, "Reach %3.0f%% lo%3.0f%%", sum / visited * 100, low * 100);
+        R::Textf(tx, ty + lh * 2, 2, COL_CYAN, ALIGN_LEFT, "Reach %3.0f%% lo%4.0f%%", sum / visited * 100, low * 100);
 
     // Drift result (from the drift test in the menu)
     if (!st.restMeasured)
-        R::Text(tx, ty + lh * 4, 2, COL_DIM, ALIGN_LEFT, "Drift: not run");
+        R::Text(tx, ty + lh * 3, 2, COL_DIM, ALIGN_LEFT, "Drift: not run");
     else
     {
         DWORD c;
         const char* verdict = DriftVerdict(st.restMax, &c);
-        R::Textf(tx, ty + lh * 4, 2, c, ALIGN_LEFT, "Drift %3.0f%% %s", st.restMax * 100, verdict);
+        R::Textf(tx, ty + lh * 3, 2, c, ALIGN_LEFT, "Drift %3.0f%% %s", st.restMax * 100, verdict);
     }
 
     // Trigger bar
@@ -909,9 +880,14 @@ static void DrawHeader()
     if (p.connected)
     {
         DrawBattery(986, 41, p);
-        R::Textf(1216, 74, 1, COL_DIM, ALIGN_RIGHT, "Port %d  %s%s  %s", g_Active + 1,
-                 SubtypeName(p.caps.SubType), (p.caps.Flags & XINPUT_CAPS_WIRELESS) ? " (wireless)" : " (wired)",
-                 g_PortChoice < 0 ? "auto" : "locked");
+        // Just wired/wireless for a normal pad; other devices (guitar, wheel...) keep their name.
+        bool wireless = (p.caps.Flags & XINPUT_CAPS_WIRELESS) != 0;
+        if (p.caps.SubType == XINPUT_DEVSUBTYPE_GAMEPAD)
+            R::Textf(1216, 74, 1, COL_DIM, ALIGN_RIGHT, "%s%s", wireless ? "Wireless" : "Wired",
+                     g_PortChoice < 0 ? "" : "  locked");
+        else
+            R::Textf(1216, 74, 1, COL_DIM, ALIGN_RIGHT, "%s (%s)%s", SubtypeName(p.caps.SubType),
+                     wireless ? "wireless" : "wired", g_PortChoice < 0 ? "" : "  locked");
     }
 }
 
@@ -941,13 +917,13 @@ static void DrawModalBox(float w, float h, const char* title)
 
 static void DrawMenu()
 {
-    DrawModalBox(560, 420, "MENU");
+    DrawModalBox(560, 380, "MENU");
     static const char* names[MI_COUNT] =
     {
-        "Resume", "Controller", "Rumble test", "Drift test (hands off)", "Button remapper", "Theme",
+        "Controller", "Rumble test", "Drift test (hands off)", "Button remapper", "Theme",
         "Reset stats", "Exit to dashboard"
     };
-    float x = 380, y = 220;
+    float x = 380, y = 240;
     for (int i = 0; i < MI_COUNT; i++, y += 40)
     {
         bool sel = i == g_MenuSel;
@@ -977,8 +953,8 @@ static void DrawBar(float x, float y, float w, float h, float v, DWORD color)
 
 static void DrawRumble(const PadState& p)
 {
-    DrawModalBox(700, 380, "RUMBLE TEST");
-    float x = 330, y = 230;
+    DrawModalBox(700, 320, "RUMBLE TEST");
+    float x = 330, y = 266;
     R::Text(x, y, 2, COL_TEXT, ALIGN_LEFT, "Left motor  (heavy, low frequency)");
     DrawBar(x, y + 24, 620, 30, g_RumbleL, COL_ORANGE);
     R::Textf(x + 610, y + 31, 2, COL_TEXT, ALIGN_RIGHT, "%3.0f%%", g_RumbleL * 100);
@@ -989,12 +965,9 @@ static void DrawRumble(const PadState& p)
     R::Textf(x + 610, y + 31, 2, COL_TEXT, ALIGN_RIGHT, "%3.0f%%", g_RumbleR * 100);
 
     y += 90;
-    R::Text(x, y, 2, COL_DIM, ALIGN_LEFT, "LT / RT: drive each motor by hand");
-    R::Text(x, y + 24, 2, COL_DIM, ALIGN_LEFT, "A: both 1s   X: left 1s   Y: right 1s");
-    R::Textf(x, y + 48, 2, g_Pulse ? COL_LIT : COL_DIM, ALIGN_LEFT, "RB: alternate pulse (%s)   B: back",
-             g_Pulse ? "on" : "off");
+    R::Text(x, y, 2, COL_DIM, ALIGN_LEFT, "LT / RT: drive each motor   B: back");
     if (!p.caps.Vibration.wLeftMotorSpeed && !p.caps.Vibration.wRightMotorSpeed)
-        R::Text(640, y + 78, 1, COL_YELLOW, ALIGN_CENTER, "This device does not report rumble motors");
+        R::Text(640, y + 34, 1, COL_YELLOW, ALIGN_CENTER, "This device does not report rumble motors");
 }
 
 static void DrawDrift()
@@ -1018,7 +991,7 @@ static void DrawDriftResult(const PadState& p)
     DrawModalBox(800, 380, "DRIFT TEST RESULTS");
     float y = 240;
     R::Text(510, y, 1, COL_DIM, ALIGN_LEFT, "average resting position");
-    R::Text(900, y, 1, COL_DIM, ALIGN_RIGHT, "worst");
+    R::Text(880, y, 1, COL_DIM, ALIGN_RIGHT, "worst");
     R::Text(1010, y, 1, COL_DIM, ALIGN_RIGHT, "result");
     y += 20;
 
@@ -1029,8 +1002,8 @@ static void DrawDriftResult(const PadState& p)
         DWORD c;
         const char* verdict = DriftVerdict(st.restMax, &c);
         R::Text(270, y, 2, COL_TEXT, ALIGN_LEFT, stickNames[k]);
-        R::Textf(510, y, 2, COL_DIM, ALIGN_LEFT, "X%+5.1f%% Y%+5.1f%%", st.restX * 100, st.restY * 100);
-        R::Textf(900, y, 2, c, ALIGN_RIGHT, "%.1f%%", st.restMax * 100);
+        R::Textf(510, y, 2, COL_DIM, ALIGN_LEFT, "X %+5.1f%% Y %+5.1f%%", st.restX * 100, st.restY * 100);
+        R::Textf(880, y, 2, c, ALIGN_RIGHT, "%.1f%%", st.restMax * 100);
         R::Text(1010, y, 2, c, ALIGN_RIGHT, verdict);
     }
 
@@ -1040,7 +1013,7 @@ static void DrawDriftResult(const PadState& p)
         bool stuck = p.trigRest[t] > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
         DWORD c = stuck ? COL_RED : COL_LIT;
         R::Text(270, y, 2, COL_TEXT, ALIGN_LEFT, trigNames[t]);
-        R::Textf(900, y, 2, c, ALIGN_RIGHT, "%d", p.trigRest[t]);
+        R::Textf(880, y, 2, c, ALIGN_RIGHT, "%d", p.trigRest[t]);
         R::Text(1010, y, 2, c, ALIGN_RIGHT, stuck ? "STUCK" : "GOOD");
     }
 
@@ -1049,6 +1022,28 @@ static void DrawDriftResult(const PadState& p)
     R::Text(640, y + 14, 1, COL_DIM, ALIGN_CENTER, "Triggers: resting above 30 of 255 counts as pressed in games.");
     R::Text(640, y + 28, 1, COL_DIM, ALIGN_CENTER, "The stick results also stay in each stick panel.");
     R::Text(640, y + 54, 2, COL_TEXT, ALIGN_CENTER, "A: close");
+}
+
+// The tester screen plus whatever box is open on top of it (also used by the PC layout preview).
+static void DrawTester(const PadState& p, Mode mode)
+{
+    // Behind the menu and the test boxes the tester shows a resting controller: input there
+    // drives the menu, not the test.
+    static PadState shown;
+    shown = p;
+    if (mode != MODE_TEST)
+        ZeroMemory(&shown.state.Gamepad, sizeof(shown.state.Gamepad));
+
+    DrawHeader();
+    DrawStickPanel(64, "LEFT STICK", shown, 0);
+    DrawStickPanel(896, "RIGHT STICK", shown, 1);
+    DrawController(shown, g_Active, p.connected);
+    DrawChecklist(shown);
+    DrawFooter();
+    if (mode == MODE_MENU)   DrawMenu();
+    if (mode == MODE_RUMBLE) DrawRumble(p);
+    if (mode == MODE_DRIFT)  DrawDrift();
+    if (mode == MODE_DRIFT_RESULT) DrawDriftResult(p);
 }
 
 //--------------------------------------------------------------------------------------
@@ -1098,7 +1093,7 @@ VOID __cdecl main()
                 {
                     g_BackHold = 0;
                     g_BackConsumed = true;
-                    g_MenuSel = MI_RESUME;
+                    g_MenuSel = 0;
                     g_RepeatDir = 0;
                     g_Mode = MODE_MENU;
                 }
@@ -1116,8 +1111,6 @@ VOID __cdecl main()
         if (g_Mode != MODE_RUMBLE)
         {
             g_RumbleL = g_RumbleR = 0;
-            g_RumbleTimer = 0;
-            g_Pulse = false;
         }
 
         R::BeginFrame(COL_BG);
@@ -1127,16 +1120,7 @@ VOID __cdecl main()
             R::EndFrame();
             continue;
         }
-        DrawHeader();
-        DrawStickPanel(64, "LEFT STICK", p, 0);
-        DrawStickPanel(896, "RIGHT STICK", p, 1);
-        DrawController(p, g_Active, p.connected);
-        DrawChecklist(p);
-        DrawFooter();
-        if (g_Mode == MODE_MENU)   DrawMenu();
-        if (g_Mode == MODE_RUMBLE) DrawRumble(p);
-        if (g_Mode == MODE_DRIFT)  DrawDrift();
-        if (g_Mode == MODE_DRIFT_RESULT) DrawDriftResult(p);
+        DrawTester(p, g_Mode);
         R::EndFrame();
     }
 }

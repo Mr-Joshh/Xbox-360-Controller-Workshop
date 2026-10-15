@@ -20,3 +20,14 @@ dist/
 Todo.txt
 MODLOG.md
 ControllerExample.png
+
+# Cover art work, reference pictures and console captures (kept locally)
+Cover/
+CoverExamples/
+ControllerExamples/
+docs/console/
+
+# Dev-only tools (kept locally); pe_4k_align.py is needed by the plugin build
+tools/*
+!tools/pe_4k_align.py
+__pycache__/

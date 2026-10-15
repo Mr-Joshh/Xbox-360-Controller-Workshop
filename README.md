@@ -8,8 +8,8 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
 
 ![Controller Workshop, dark theme](docs/tester-dark.png)
 
-> The screenshots in this README are rendered by the PC preview tool in `tools/preview`, which
-> runs the app's own drawing code. They look the same on the console.
+> The screenshots in this README are rendered on a PC from the app's own drawing code and were
+> checked against screenshots taken on a console.
 
 ## Features
 
@@ -18,12 +18,12 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
   triggers fill.
 - Button check: all 16 inputs turn green once they've worked, with a press count. A button that
   never turns green is broken.
-- Stick panels: raw values (-32768..32767) and percentages, angle, a motion trail, and an outline
+- Stick panels: raw values (-32768..32767) and percentages, a motion trail, and an outline
   of the furthest point reached in 64 directions, which shows worn sticks that can't reach the edge.
 - Trigger bars with the highest value reached, so you can spot a trigger that never gets to 255.
 - Drift test: put the controller down and it measures how far each stick and trigger rests from
   center, then rates them GOOD / SLIGHT / DRIFT (sticks) and GOOD / STUCK (triggers).
-- Rumble test: drive each motor by hand with the triggers, or run 1-second and pulse patterns.
+- Rumble test: drive each motor by hand with the triggers.
 - Battery level for wireless controllers, up to 4 controllers, and the Guide button's ring of
   light shows which port you're looking at.
 
@@ -44,8 +44,6 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
 
 - An RGH or JTAG Xbox 360 that runs unsigned code (dev-kit-signed XEXs, as built by the SDK).
 - **DashLaunch** for the button remapper (the plugin loads through it). The tester works without it.
-- To build from source: Visual Studio 2010 and the Xbox 360 SDK (tested with 21256). Neither is
-  included in this repository.
 
 ## Install
 
@@ -54,7 +52,8 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
    - `default.xex` is the app.
    - `ControllerWorkshopPlugin.xex` is the remap plugin.
 
-   The app itself can live anywhere, but its data always goes to `Hdd:\ControllerWorkshop\`.
+   The app can live anywhere (for example `Hdd:\Apps\ControllerWorkshop\`), but its settings and
+   profiles always go to `Hdd:\ControllerWorkshop\`.
 2. For the remapper, add the plugin to DashLaunch's `launch.ini` under `[Plugins]`, in a free
    slot (`plugin1` to `plugin5`), then restart the console:
    ```ini
@@ -65,7 +64,8 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
    if you want it in your app list.
 
 ### Uninstall
-Remove the plugin line from `launch.ini`, restart, and delete `Hdd:\ControllerWorkshop\`.
+Remove the plugin line from `launch.ini`, restart, and delete `Hdd:\ControllerWorkshop\` (and the
+app's own folder, if you put it somewhere else).
 
 ## Using the tester
 
@@ -74,19 +74,19 @@ The app opens on the tester. Every button you press is tested right away; there'
 | Screen part | What it shows |
 |---|---|
 | Controller picture | Buttons, D-pad, bumpers and stick clicks light up while held. Sticks move, triggers fill. |
-| Stick panels | Raw X/Y and %, magnitude and angle, a fading trail, the furthest point reached in each of 64 directions (blue outline) and the last drift test result. |
+| Stick panels | Raw X/Y and %, a fading trail, the furthest point reached in each of 64 directions (blue outline), Reach (average and lowest of those directions, 100% = the edge) and the last drift test result. |
 | Trigger bars | Live value 0-255, the threshold where games count it as pressed (30, orange mark) and the highest value reached (blue mark). |
 | Button check | All 16 inputs. Outlined green once they've worked; the number is the press count. |
-| Top right | Battery, connected ports (1-4) and the controller type. **Auto** follows whichever controller was used last. |
+| Top right | Battery, connected ports (1-4; the outlined one is shown) and whether it's wireless or wired (plus "locked" when the menu locks a port). By default the screen follows whichever controller was used last. |
 
 **Hold BACK for one second** to open the menu (D-pad to move, A to select, B to close).
-Every other button is part of the test, so BACK is the only one that opens the menu.
+Every other button is part of the test, so BACK is the only one that opens the menu. While the
+menu or a test is open, presses aren't counted and the tester behind it shows a resting controller.
 
 | Menu item | What it does |
 |---|---|
-| Resume | Back to the tester. |
-| Controller | **Auto**, or lock to one connected port. Only ports with a controller are offered. |
-| Rumble test | LT and RT drive the left (heavy) and right (light) motors. A = both for 1 s, X = left, Y = right, RB = alternating pulse, B = back. |
+| Controller | **Auto**, or lock to one connected port. Only ports with a connected controller are offered. |
+| Rumble test | LT and RT drive the left (heavy) and right (light) motors. B = back. |
 | Drift test | Let go of the controller. After a 2-second countdown it measures for 2 seconds and shows the results. |
 | Button remapper | See below. |
 | Theme | Dark or Light (left/right or A). Remembered between sessions. |
@@ -99,7 +99,9 @@ Every other button is part of the test, so BACK is the only one that opens the m
   show up in games as movement you didn't make. You can also watch the dot: it should come back to
   the middle when you let go.
 - **Worn sticks**: spin each stick slowly around its edge. The blue outline should be a nearly full
-  circle. A dent in one direction (a low "lo" %) means the stick can't reach the edge there.
+  circle and Reach should read close to 100%. A dent in one direction (a low "lo" %) means the
+  stick can't reach the edge there. Reach stops at 100%, even though a stick reports a little more
+  in the corners of its square gate.
 - **Dead buttons**: press everything once. Anything still gray in the button check didn't register.
 - **Triggers**: pull each one all the way. "Full range OK" means it reaches 255. A trigger resting
   above 30 in the drift test is reported as STUCK, because games treat it as held.
@@ -111,12 +113,14 @@ Every other button is part of the test, so BACK is the only one that opens the m
 ## Using the button remapper
 
 Open **Button remapper** from the menu and pick a game, or **All games** to set a default for
-every game without its own profile. Games with a profile are marked CUSTOM.
+every game without its own profile. Games with a profile are marked CUSTOM. In the list, A opens
+the editor, Y deletes the selected game's profile (it asks first) and B goes back.
 
 ![Game list](docs/remap-games.png)
 
 In the editor, the left column is the button you press and the right column is what the game
-receives. Changed rows are orange.
+receives. Changed rows are orange. The **WHAT THE GAME SEES** panel on the right only reacts while
+you're trying the layout (Y), so moving through the list doesn't light it up.
 
 | Button | Action |
 |---|---|
@@ -147,12 +151,13 @@ once and it will appear.
 
 ## Files on the console
 
-Everything lives in `Hdd:\ControllerWorkshop\`:
+The app's data always lives in `Hdd:\ControllerWorkshop\` (with the two XEXs, if you installed them
+there as above):
 
 | File | Contents |
 |---|---|
-| `default.xex` | The app |
-| `ControllerWorkshopPlugin.xex` | The DashLaunch plugin |
+| `default.xex` | The app (can also be anywhere else) |
+| `ControllerWorkshopPlugin.xex` | The DashLaunch plugin (the path in `launch.ini` must match) |
 | `Remap\<TITLEID>.ini` | One remap profile per game (`ALL.ini` = All games) |
 | `titles.txt` | Games the plugin has seen (`TITLEID\|Name`), used for the game list |
 | `settings.ini` | App settings (`theme=dark` or `theme=light`) |
@@ -187,47 +192,6 @@ out keep their normal function.
   another way won't be affected.
 - **The plugin conflicts with another plugin.** Controller Workshop's plugin loads at memory
   address 0x91E80000-0x91EB1000. If another plugin uses that range, one of them won't load.
-
-## Building from source
-
-You need Visual Studio 2010 and the Xbox 360 SDK installed (default paths), plus Python 3 for the
-plugin build. The SDK is not included and isn't needed to use the release files.
-Builds go to `dist\ControllerWorkshop\` (not part of the repository).
-
-| What | Command | Output |
-|---|---|---|
-| App | `build\build.bat` (or `build\build.bat Debug`) | `dist\ControllerWorkshop\default.xex` |
-| Plugin | `plugin\build\build_plugin.bat` | `dist\ControllerWorkshop\ControllerWorkshopPlugin.xex` |
-| Layout preview (PC) | `tools\preview\build_preview.bat` | `tools\preview\out\*.png` |
-
-How the plugin is built: the DLL is linked at 0x98000000 with 4 KB section alignment,
-`tools\pe_4k_align.py` marks it 4 KB-aligned, and `imagexex` turns it into a system DLL loaded at
-0x91E80000 (`plugin\build\xex.xml`). The XEX is left exactly as imagexex writes it (dev-kit
-encrypted). Modifying it afterwards breaks the header hash, and the console then won't load it.
-
-The preview tool compiles the app's drawing code for Windows against a stub `xtl.h`, draws each
-screen to SVG with scripted controller input, and converts the SVGs to PNG with headless Microsoft
-Edge. It's the quickest way to check a layout change without a console.
-
-### Project layout
-
-```
-src/            the app
-  main.cpp        tester screens, menu, drift and rumble tests
-  remap_ui.cpp    remapper screens
-  remap.cpp       profile format and remapping (shared with the plugin)
-  games.cpp       game list (titles.txt, installed content, existing profiles)
-  render.cpp      2D renderer (D3D9, no textures) and text with the built-in font
-  shape.cpp       controller outline (spline + triangulation)
-  theme.cpp       dark and light colors, settings.ini
-  battery.cpp     battery level from xam
-  system.cpp      hard drive access, plugin detection, migration from the old name
-  font8x8.h       8x8 bitmap font
-plugin/         the DashLaunch plugin (title detection, game names, input hook, log)
-build/          app project and build script
-tools/          pe_4k_align.py, trace_outline.py (traces a controller outline from a picture), preview/
-docs/           README screenshots
-```
 
 ## Known limitations
 
