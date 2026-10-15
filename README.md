@@ -63,6 +63,11 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
 3. Start `default.xex` from Aurora, FSD, or XeXMenu. Add it to your Aurora scan paths
    if you want it in your app list.
 
+**Name, icon and Aurora art.** The XEX carries its own name and icon, so Aurora and FSD show "Controller Workshop" with its icon as soon as they scan it. The first time you
+start the app from Aurora, it also gives Aurora its cover and background (restart Aurora, or leave
+the list and come back, to see them). It only fills in art Aurora doesn't have yet, so a cover you
+picked yourself is never replaced.
+
 ### Uninstall
 Remove the plugin line from `launch.ini`, restart, and delete `Hdd:\ControllerWorkshop\` (and the
 app's own folder, if you put it somewhere else).
@@ -192,6 +197,9 @@ out keep their normal function.
   another way won't be affected.
 - **The plugin conflicts with another plugin.** Controller Workshop's plugin loads at memory
   address 0x91E80000-0x91EB1000. If another plugin uses that range, one of them won't load.
+- **No cover or background in Aurora.** Start the app once from Aurora, then restart Aurora. The app
+  looks for Aurora's `Data\GameData` folder up to two folders deep on the hard drive (for example
+  `Hdd:\Aurora` or `Hdd:\Apps\Aurora`); an Aurora installed on a USB drive isn't covered.
 
 ## Known limitations
 

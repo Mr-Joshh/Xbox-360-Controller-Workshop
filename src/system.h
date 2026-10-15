@@ -17,6 +17,11 @@ void Sys_CreateDir(const char* path);
 typedef void (*DirCallback)(const char* name, bool isDir, void* ctx);
 void Sys_ListDir(const char* dir, DirCallback cb, void* ctx);
 
+// Gives Aurora the app's cover, background and icon: in every Aurora Data\GameData\FFFF0C70_* folder
+// found on Hdd:, writes the art carried in the XEX (sections CWGC/CWBK/CWGL) where Aurora only has
+// its empty placeholder. Art someone picked themselves is never replaced.
+void Sys_InstallAuroraArt();
+
 // One-time copy of profiles, the game list and settings from the old Hdd:\ControllerTool folder
 // (the app's name before it became Controller Workshop). Existing new files are kept.
 void Sys_MigrateOldData();

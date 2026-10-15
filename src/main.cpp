@@ -1056,6 +1056,7 @@ VOID __cdecl main()
     InitControllerShape();
     Sys_MountHdd();
     Sys_MigrateOldData();
+    Sys_InstallAuroraArt();
     Theme_Load();
 
     DWORD last = GetTickCount();

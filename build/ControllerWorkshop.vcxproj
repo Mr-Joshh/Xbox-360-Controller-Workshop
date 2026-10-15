@@ -54,6 +54,9 @@
     </Link>
     <ImageXex>
       <ConfigurationFile>$(ProjectDir)xex.xml</ConfigurationFile>
+      <!-- SPA (title name + icon, built by build.bat) and the Aurora art the app installs -->
+      <!-- Relative to build\ (imagexex can't take quoted paths, and the project path may have spaces) -->
+      <AdditionalSections>FFFF0C70=obj\spa.bin;CWGC=art\GCFFFF0C70.asset;CWBK=art\BKFFFF0C70.asset;CWGL=art\GLFFFF0C70.asset</AdditionalSections>
     </ImageXex>
   </ItemDefinitionGroup>
   <ItemGroup>
