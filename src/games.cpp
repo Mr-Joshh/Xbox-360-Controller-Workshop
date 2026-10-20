@@ -13,6 +13,7 @@ namespace
         GameEntry* list;
         int        count, max;
         DWORD      titleId;     // scratch for the content scan
+        const char* folder;     // profile folder under CT_DIR_HDD
     };
 
     char g_Buf[64 * 1024];
@@ -143,9 +144,10 @@ namespace
         if (isDir || strlen(name) != 12 || _stricmp(name + 8, ".ini") || !ParseHex(name, &id))
             return;
         char path[MAX_PATH], profileName[64];
-        _snprintf(path, sizeof(path), CT_DIR_HDD "\\Remap\\%s", name);
+        _snprintf(path, sizeof(path), CT_DIR_HDD "\\%s\\%s", b.folder, name);
         if (Sys_ReadFile(path, g_Buf, sizeof(g_Buf)) < 0)
             return;
+        // Only the name= line is used, which remap and dead zone profiles both have.
         RemapProfile p;
         Remap_Parse(g_Buf, &p, profileName, sizeof(profileName));
         Add(b, id, profileName);
@@ -160,15 +162,15 @@ namespace
     }
 }
 
-void Games_ProfilePath(DWORD titleId, char* out, int size)
+void Games_ProfilePath(const char* folder, DWORD titleId, char* out, int size)
 {
     if (titleId == 0)
-        _snprintf(out, size, CT_DIR_HDD "\\Remap\\" CT_REMAP_ALL ".ini");
+        _snprintf(out, size, CT_DIR_HDD "\\%s\\" CT_REMAP_ALL ".ini", folder);
     else
-        _snprintf(out, size, CT_DIR_HDD "\\Remap\\%08X.ini", titleId);
+        _snprintf(out, size, CT_DIR_HDD "\\%s\\%08X.ini", folder, titleId);
 }
 
-int Games_Load(GameEntry* out, int max)
+int Games_Load(GameEntry* out, int max, const char* folder)
 {
     if (max < 1)
         return 0;
@@ -176,13 +178,15 @@ int Games_Load(GameEntry* out, int max)
     out[0].titleId = 0;
     strcpy(out[0].name, "All games (default)");
     char path[MAX_PATH];
-    Games_ProfilePath(0, path, sizeof(path));
+    Games_ProfilePath(folder, 0, path, sizeof(path));
     out[0].hasProfile = Sys_ReadFile(path, g_Buf, sizeof(g_Buf)) >= 0;
 
-    Builder b = { out + 1, 0, max - 1, 0 };
+    Builder b = { out + 1, 0, max - 1, 0, folder };
     LoadSeenTitles(b);
     Sys_ListDir("Hdd:\\Content\\0000000000000000", OnContentTitle, &b);
-    Sys_ListDir(CT_DIR_HDD "\\Remap", OnProfile, &b);
+    char dir[MAX_PATH];
+    _snprintf(dir, sizeof(dir), CT_DIR_HDD "\\%s", folder);
+    Sys_ListDir(dir, OnProfile, &b);
 
     for (int i = 0; i < b.count; i++)
         if (!out[1 + i].name[0])

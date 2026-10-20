@@ -10,6 +10,7 @@
 #include "theme.h"
 #include "system.h"
 #include "remap_ui.h"
+#include "deadzone_ui.h"
 
 const float PI = 3.14159265f;
 
@@ -89,7 +90,7 @@ static PadState g_Pads[XUSER_MAX_COUNT];
 //--------------------------------------------------------------------------------------
 // App state
 //--------------------------------------------------------------------------------------
-enum Mode { MODE_TEST, MODE_MENU, MODE_RUMBLE, MODE_DRIFT, MODE_DRIFT_RESULT, MODE_REMAP };
+enum Mode { MODE_TEST, MODE_MENU, MODE_RUMBLE, MODE_DRIFT, MODE_DRIFT_RESULT, MODE_REMAP, MODE_DEADZONE };
 
 static Mode  g_Mode = MODE_TEST;
 static int   g_PortChoice = -1;          // -1 = auto
@@ -292,7 +293,7 @@ static void UpdateStats(PadState& p)
 //--------------------------------------------------------------------------------------
 enum MenuItem
 {
-    MI_PORT, MI_RUMBLE, MI_DRIFT, MI_REMAP, MI_THEME, MI_RESET, MI_EXIT, MI_COUNT
+    MI_PORT, MI_RUMBLE, MI_DRIFT, MI_REMAP, MI_DEADZONE, MI_THEME, MI_RESET, MI_EXIT, MI_COUNT
 };
 
 // Next port choice in direction 'dir' (+1/-1): Auto (-1) or a port with a controller connected.
@@ -384,6 +385,10 @@ static void UpdateMenu(PadState& p, float dt)
         case MI_REMAP:
             RemapUI_Open();
             g_Mode = MODE_REMAP;
+            break;
+        case MI_DEADZONE:
+            DeadzoneUI_Open();
+            g_Mode = MODE_DEADZONE;
             break;
         case MI_RESET:
             ResetStats(p);
@@ -917,13 +922,13 @@ static void DrawModalBox(float w, float h, const char* title)
 
 static void DrawMenu()
 {
-    DrawModalBox(560, 380, "MENU");
+    DrawModalBox(560, 420, "MENU");
     static const char* names[MI_COUNT] =
     {
-        "Controller", "Rumble test", "Drift test (hands off)", "Button remapper", "Theme",
-        "Reset stats", "Exit to dashboard"
+        "Controller", "Rumble test", "Drift test", "Button remapper", "Dead zone configuration",
+        "Theme", "Reset stats", "Exit to dashboard"
     };
-    float x = 380, y = 240;
+    float x = 380, y = 220;
     for (int i = 0; i < MI_COUNT; i++, y += 40)
     {
         bool sel = i == g_MenuSel;
@@ -1108,6 +1113,10 @@ VOID __cdecl main()
             if (!RemapUI_Update(p.state, p.prev, dt))
                 g_Mode = MODE_MENU;
             break;
+        case MODE_DEADZONE:
+            if (!DeadzoneUI_Update(p.state, p.prev, dt))
+                g_Mode = MODE_MENU;
+            break;
         }
         if (g_Mode != MODE_RUMBLE)
         {
@@ -1118,6 +1127,12 @@ VOID __cdecl main()
         if (g_Mode == MODE_REMAP)
         {
             RemapUI_Draw(p.state);
+            R::EndFrame();
+            continue;
+        }
+        if (g_Mode == MODE_DEADZONE)
+        {
+            DeadzoneUI_Draw(p.state);
             R::EndFrame();
             continue;
         }

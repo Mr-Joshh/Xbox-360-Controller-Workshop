@@ -1,10 +1,12 @@
 # Controller Workshop
 
-A controller tester and per-game button remapper for modded (RGH/JTAG) Xbox 360 consoles.
+A controller tester, per-game button remapper and stick drift fix for modded (RGH/JTAG) Xbox 360
+consoles.
 
-Test every button, stick and trigger on a live picture of the controller, check sticks for drift
-and worn-out spots, try the rumble motors and see the battery level. Then remap buttons for any
-game. A small DashLaunch plugin applies your layout every time that game starts.
+Test every button, stick and trigger on your controller, check for stick drift
+and worn-out spots, and try the rumble motors. Then remap buttons or set
+stick dead zones for any game. A small DashLaunch plugin applies your settings every time that
+game starts.
 
 ![Controller Workshop, dark theme](docs/tester-dark.png)
 
@@ -34,6 +36,13 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
 - Try a layout in the app before saving it.
 - Applies automatically when the game starts. No need to open the app again.
 
+**Dead zone configuration (drift fix)**
+- Stops a drifting stick from moving your character or camera on its own.
+- Pick a dead zone size for each stick (1-50%), or let the app measure your drift and pick one.
+- Per-game profiles plus an "All games" default, separate from button remaps, so one setting can
+  fix a worn stick in every game.
+- Applied by the same plugin when the game starts.
+
 **Light and dark themes**
 
 | Dark | Light |
@@ -43,18 +52,19 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
 ## Requirements
 
 - An RGH or JTAG Xbox 360 that runs unsigned code (dev-kit-signed XEXs, as built by the SDK).
-- **DashLaunch** for the button remapper (the plugin loads through it). The tester works without it.
+- **DashLaunch** for the button remapper and stick dead zones (the plugin loads through it). The
+  tester works without it.
 
 ## Install
 
 1. Download `default.xex` and `ControllerWorkshopPlugin.xex` from the
    [Releases](../../releases) page and copy both to **`Hdd:\ControllerWorkshop\`** on the console.
    - `default.xex` is the app.
-   - `ControllerWorkshopPlugin.xex` is the remap plugin.
+   - `ControllerWorkshopPlugin.xex` is the plugin that applies remaps and dead zones in games.
 
    The app can live anywhere (for example `Hdd:\Apps\ControllerWorkshop\`), but its settings and
    profiles always go to `Hdd:\ControllerWorkshop\`.
-2. For the remapper, add the plugin to DashLaunch's `launch.ini` under `[Plugins]`, in a free
+2. For the remapper and dead zones, add the plugin to DashLaunch's `launch.ini` under `[Plugins]`, in a free
    slot (`plugin1` to `plugin5`), then restart the console:
    ```ini
    [Plugins]
@@ -64,8 +74,7 @@ game. A small DashLaunch plugin applies your layout every time that game starts.
    if you want it in your app list.
 
 **Name, icon and Aurora art.** The XEX carries its own name and icon, so Aurora and FSD show "Controller Workshop" with its icon as soon as they scan it. The first time you
-start the app from Aurora, it also gives Aurora its cover and background (restart Aurora, or leave
-the list and come back, to see them). It only fills in art Aurora doesn't have yet, so a cover you
+start the app from Aurora, it also gives Aurora its cover and background (restart Aurora to see them). It only fills in art Aurora doesn't have yet, so a cover you
 picked yourself is never replaced.
 
 ### Uninstall
@@ -74,7 +83,7 @@ app's own folder, if you put it somewhere else).
 
 ## Using the tester
 
-The app opens on the tester. Every button you press is tested right away; there's nothing to start.
+The app opens on the tester so you can start using it right away.
 
 | Screen part | What it shows |
 |---|---|
@@ -94,6 +103,7 @@ menu or a test is open, presses aren't counted and the tester behind it shows a 
 | Rumble test | LT and RT drive the left (heavy) and right (light) motors. B = back. |
 | Drift test | Let go of the controller. After a 2-second countdown it measures for 2 seconds and shows the results. |
 | Button remapper | See below. |
+| Dead zone configuration | See below. |
 | Theme | Dark or Light (left/right or A). Remembered between sessions. |
 | Reset stats | Clears the button check, press counts, reach outline and drift results for the shown controller. |
 | Exit to dashboard | Goes back to the dashboard. |
@@ -102,7 +112,7 @@ menu or a test is open, presses aren't counted and the tester behind it shows a 
 
 - **Stick drift**: run the drift test. Under 10% is normal, 10-20% is slight wear, over 20% will
   show up in games as movement you didn't make. You can also watch the dot: it should come back to
-  the middle when you let go.
+  the middle when you let go. To fix drift in games, use **Dead zone configuration**.
 - **Worn sticks**: spin each stick slowly around its edge. The blue outline should be a nearly full
   circle and Reach should read close to 100%. A dent in one direction (a low "lo" %) means the
   stick can't reach the edge there. Reach stops at 100%, even though a stick reports a little more
@@ -110,8 +120,6 @@ menu or a test is open, presses aren't counted and the tester behind it shows a 
 - **Dead buttons**: press everything once. Anything still gray in the button check didn't register.
 - **Triggers**: pull each one all the way. "Full range OK" means it reaches 255. A trigger resting
   above 30 in the drift test is reported as STUCK, because games treat it as held.
-- **Battery**: shown as Empty / Low / Medium / Full, the same steps as the Guide's battery icon.
-  The console only reports these steps, not a percentage. Wired controllers show WIRED.
 
 ![Drift test results](docs/drift-results.png)
 
@@ -127,15 +135,6 @@ In the editor, the left column is the button you press and the right column is w
 receives. Changed rows are orange. The **WHAT THE GAME SEES** panel on the right only reacts while
 you're trying the layout (Y), so moving through the list doesn't light it up.
 
-| Button | Action |
-|---|---|
-| D-pad up/down | Choose a row |
-| D-pad left/right | Change what the button does (any button, LT/RT, or NONE to turn it off), or switch an option on/off |
-| Y | Try the layout: every button you press shows what the game will see. Hold BACK for 1 second to stop. |
-| X | Reset to the normal layout |
-| START | Save |
-| B | Back (asks first if you have unsaved changes) |
-
 ![Remap editor](docs/remap-editor.png)
 
 Good to know:
@@ -145,8 +144,6 @@ Good to know:
 - **All games** never applies to the dashboard, Aurora, FSD, XeXMenu or Controller Workshop itself,
   so a bad default can't lock you out of your menus.
 - A profile applies to every controller connected while the game runs.
-- A trigger mapped to a button counts as pressed past the normal threshold (30); a button mapped to
-  a trigger presses it fully. Trigger-to-trigger keeps the analog value.
 - Saving the normal layout deletes the profile, so the plugin leaves that game alone.
 - The Guide button can't be remapped.
 
@@ -154,49 +151,55 @@ Good to know:
 installs). A game you haven't started since installing the plugin may not be listed yet; start it
 once and it will appear.
 
-## Files on the console
+## Using dead zone configuration
 
-The app's data always lives in `Hdd:\ControllerWorkshop\` (with the two XEXs, if you installed them
-there as above):
+Open **Dead zone configuration** from the menu and pick a game, or **All games** to fix stick drift in
+every game without its own dead zone profile. The list works like the remapper's (A: edit,
+Y: delete profile, B: back; CUSTOM = has a dead zone profile). Dead zone profiles are separate from
+remap profiles, so a game can have its own button layout and still use the All games dead zone.
 
-| File | Contents |
+In the editor, set a size for each stick, or press **Y** to measure the drift. The app asks you to
+push both sticks up, right, down and left, letting go after each one, and measures where they come
+to rest each time. A worn stick settles in a different spot depending on which way it came back
+from, so the worst of the four is used, plus a small margin (2%). The **WHAT
+THE GAME SEES** panel is live: the hollow ring is where your stick really is, the green dot is
+what the game gets and the orange disc is the dead zone. The thin ring is the dead zone most games
+already use on their own (about 24-27%); drift inside it usually doesn't show up in games anyway.
+
+| Button | Action |
 |---|---|
-| `default.xex` | The app (can also be anywhere else) |
-| `ControllerWorkshopPlugin.xex` | The DashLaunch plugin (the path in `launch.ini` must match) |
-| `Remap\<TITLEID>.ini` | One remap profile per game (`ALL.ini` = All games) |
-| `titles.txt` | Games the plugin has seen (`TITLEID\|Name`), used for the game list |
-| `settings.ini` | App settings (`theme=dark` or `theme=light`) |
-| `plugin.log` | What the plugin did for each game; useful when something doesn't work |
+| D-pad up/down | Choose a stick |
+| D-pad left/right | Make the dead zone smaller or bigger (OFF, 1-50%) |
+| Y | Measure drift: push both sticks each way as asked and let go; both sticks are set from the result (B cancels) |
+| X | Turn both dead zones off |
+| START | Save |
+| B | Back (asks first if you have unsaved changes) |
 
-Profiles are plain text and can be edited or shared:
+![Dead zone editor](docs/deadzone-editor.png)
 
-```ini
-; Controller Workshop remap profile
-name=Halo 3
-A=B
-B=A
-LT=RT
-RT=LT
-BACK=NONE
-swap_sticks=0
-invert_ly=0
-invert_ry=1
-```
-
-Button names: `A B X Y LB RB LS RS BACK START UP DOWN LEFT RIGHT LT RT`, or `NONE`. Buttons left
-out keep their normal function.
+Good to know:
+- Past the dead zone, the rest of the stick's travel is stretched so the movement starts right
+  where the game's own dead zone ends. You don't lose fine aim, and the two dead zones don't add
+  up. A dead zone smaller than the game's own changes nothing in most games.
+- Dead zones are applied to the physical sticks before any remapping, so they follow the stick
+  if you also swap the sticks.
+- Like remaps: applied when the game starts, a game's own profile beats **All games**, **All
+  games** never applies to dashboards, Aurora, FSD, XeXMenu or Controller Workshop (so the tester
+  always shows your real stick), and a profile applies to every connected controller.
+- Setting both sticks to OFF and saving deletes the profile.
 
 ## Troubleshooting
 
 - **The remapper says "Plugin not running".** Check the `launch.ini` line points to
   `Hdd:\ControllerWorkshop\ControllerWorkshopPlugin.xex` and that you restarted the console. If
   `Hdd:\ControllerWorkshop\plugin.log` doesn't exist, the plugin didn't load.
-- **A remap doesn't work in a game.** Look in `plugin.log`. For each game it logs the title ID, the
-  name, which profile it used, and either "remap active" or why it gave up. The plugin changes
+- **A remap or dead zone doesn't work in a game.** Look in `plugin.log`. For each game it logs the
+  title ID, the name, which remap and dead zone profiles it used (with both dead zone sizes), and
+  either "remap active" or why it gave up. The plugin changes
   input that games read through the standard XInput function. A game that reads the controller
   another way won't be affected.
 - **The plugin conflicts with another plugin.** Controller Workshop's plugin loads at memory
-  address 0x91E80000-0x91EB1000. If another plugin uses that range, one of them won't load.
+  address 0x91E80000-0x91EB2000. If another plugin uses that range, one of them won't load.
 - **No cover or background in Aurora.** Start the app once from Aurora, then restart Aurora. The app
   looks for Aurora's `Data\GameData` folder up to two folders deep on the hard drive (for example
   `Hdd:\Aurora` or `Hdd:\Apps\Aurora`); an Aurora installed on a USB drive isn't covered.
@@ -204,9 +207,9 @@ out keep their normal function.
 ## Known limitations
 
 - The Guide button can't be tested or remapped; the system keeps it for itself.
-- Battery level comes in four steps (Empty / Low / Medium / Full); there's no percentage.
-- A remap profile applies to all connected controllers, not per controller.
-- Remap changes apply the next time the game starts.
+- Remap and dead zone profiles apply to all connected controllers, not per controller.
+- Remap and dead zone changes apply the next time the game starts.
+- A dead zone only covers the sticks; the triggers keep their normal behavior.
 
 ## Credits
 

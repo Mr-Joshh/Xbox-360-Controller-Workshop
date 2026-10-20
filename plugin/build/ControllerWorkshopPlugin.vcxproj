@@ -63,12 +63,14 @@
     <ClCompile Include="..\hooking.cpp" />
     <ClCompile Include="..\kfile.cpp" />
     <ClCompile Include="..\..\src\remap.cpp" />
+    <ClCompile Include="..\..\src\deadzone.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\hooking.h" />
     <ClInclude Include="..\kernel.h" />
     <ClInclude Include="..\kfile.h" />
     <ClInclude Include="..\..\src\remap.h" />
+    <ClInclude Include="..\..\src\deadzone.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

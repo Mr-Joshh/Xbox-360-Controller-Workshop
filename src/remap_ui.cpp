@@ -2,6 +2,7 @@
 #include "remap_ui.h"
 #include "remap.h"
 #include "games.h"
+#include "gamelist_ui.h"
 #include "system.h"
 #include "theme.h"
 #include <stdio.h>
@@ -11,18 +12,14 @@ namespace
 {
     enum Screen { SCR_LIST, SCR_EDIT, SCR_TRY, SCR_CONFIRM_DISCARD, SCR_CONFIRM_DELETE };
 
-    const int MAX_GAMES = 256;
-    const int LIST_ROWS = 9;
     const int OPT_SWAP = IN_COUNT, OPT_INV_LY = IN_COUNT + 1, OPT_INV_RY = IN_COUNT + 2;
     const int EDIT_ROWS = IN_COUNT + 3;
 
     Screen       g_Screen;
-    GameEntry    g_Games[MAX_GAMES];
-    int          g_GameCount;
-    int          g_ListSel, g_ListTop;
+    GameList     g_List;
     bool         g_PluginLoaded;
 
-    int          g_Game;            // index into g_Games being edited
+    int          g_Game;            // index into g_List.games being edited
     RemapProfile g_Edit, g_Saved;
     int          g_EditSel;
     float        g_BackHold;
@@ -30,8 +27,7 @@ namespace
     DWORD        g_StatusColor;
     char         g_FileBuf[8 * 1024];
 
-    int          g_RepeatDir;
-    float        g_RepeatTimer;
+    NavRepeat    g_Repeat;
 
     // ----------------------------------------------------------------------------------
     // Input helpers
@@ -47,30 +43,7 @@ namespace
     // D-pad / left stick with key repeat. Returns 'U', 'D', 'L', 'R' or 0.
     char Nav(float dt)
     {
-        const XINPUT_GAMEPAD& g = g_Cur->Gamepad;
-        int dir = 0;
-        if ((g.wButtons & XINPUT_GAMEPAD_DPAD_UP) || g.sThumbLY > 20000)         dir = 'U';
-        else if ((g.wButtons & XINPUT_GAMEPAD_DPAD_DOWN) || g.sThumbLY < -20000) dir = 'D';
-        else if ((g.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) || g.sThumbLX < -20000) dir = 'L';
-        else if ((g.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) || g.sThumbLX > 20000) dir = 'R';
-        if (!dir)
-        {
-            g_RepeatDir = 0;
-            return 0;
-        }
-        if (dir != g_RepeatDir)
-        {
-            g_RepeatDir = dir;
-            g_RepeatTimer = 0.4f;
-            return (char)dir;
-        }
-        g_RepeatTimer -= dt;
-        if (g_RepeatTimer <= 0)
-        {
-            g_RepeatTimer = 0.08f;
-            return (char)dir;
-        }
-        return 0;
+        return UI_Nav(g_Repeat, g_Cur->Gamepad, dt, true);
     }
 
     bool Down(const XINPUT_GAMEPAD& g, int input)
@@ -107,17 +80,15 @@ namespace
     // ----------------------------------------------------------------------------------
     void Reload()
     {
-        g_GameCount = Games_Load(g_Games, MAX_GAMES);
+        GameList_Load(g_List, CT_REMAP_FOLDER);
         g_PluginLoaded = Sys_PluginLoaded();
-        if (g_ListSel >= g_GameCount)
-            g_ListSel = g_GameCount - 1;
     }
 
     void OpenEditor(int game)
     {
         g_Game = game;
         char path[MAX_PATH];
-        Games_ProfilePath(g_Games[game].titleId, path, sizeof(path));
+        Games_ProfilePath(CT_REMAP_FOLDER, g_List.games[game].titleId, path, sizeof(path));
         if (Sys_ReadFile(path, g_FileBuf, sizeof(g_FileBuf)) >= 0)
             Remap_Parse(g_FileBuf, &g_Edit, NULL, 0);
         else
@@ -130,9 +101,9 @@ namespace
 
     void Save()
     {
-        GameEntry& game = g_Games[g_Game];
+        GameEntry& game = g_List.games[g_Game];
         char path[MAX_PATH];
-        Games_ProfilePath(game.titleId, path, sizeof(path));
+        Games_ProfilePath(CT_REMAP_FOLDER, game.titleId, path, sizeof(path));
         if (Remap_IsDefault(&g_Edit))
         {
             // A default layout needs no profile; removing it keeps the plugin out of the game.
@@ -143,7 +114,7 @@ namespace
             return;
         }
         Sys_CreateDir(CT_DIR_HDD);
-        Sys_CreateDir(CT_DIR_HDD "\\Remap");
+        Sys_CreateDir(CT_DIR_HDD "\\" CT_REMAP_FOLDER);
         int n = Remap_Write(&g_Edit, game.name, g_FileBuf, sizeof(g_FileBuf));
         if (Sys_WriteFile(path, g_FileBuf, n))
         {
@@ -157,9 +128,9 @@ namespace
 
     void DeleteProfile()
     {
-        GameEntry& game = g_Games[g_ListSel];
+        GameEntry& game = g_List.games[g_List.sel];
         char path[MAX_PATH];
-        Games_ProfilePath(game.titleId, path, sizeof(path));
+        Games_ProfilePath(CT_REMAP_FOLDER, game.titleId, path, sizeof(path));
         Sys_DeleteFile(path);
         game.hasProfile = false;
     }
@@ -183,77 +154,10 @@ namespace
     // ----------------------------------------------------------------------------------
     // Drawing helpers
     // ----------------------------------------------------------------------------------
-    void TextClipped(float x, float y, float scale, DWORD color, int maxChars, const char* s)
-    {
-        char buf[96];
-        int n = (int)strlen(s);
-        if (n > maxChars && maxChars > 3)
-        {
-            memcpy(buf, s, maxChars - 3);
-            strcpy(buf + maxChars - 3, "...");
-        }
-        else
-            strncpy(buf, s, sizeof(buf) - 1), buf[sizeof(buf) - 1] = 0;
-        R::Text(x, y, scale, color, ALIGN_LEFT, buf);
-    }
-
-    void DrawModal(const char* title, const char* line, const char* keys)
-    {
-        R::Rect(0, 0, SCREEN_W, SCREEN_H, COL_SHADE);
-        R::RoundRect(337, 257, 606, 206, 16, COL_ACCENT);
-        R::RoundRect(340, 260, 600, 200, 14, COL_PANEL);
-        R::Text(640, 285, 3, COL_TEXT, ALIGN_CENTER, title);
-        R::Text(640, 345, 1, COL_DIM, ALIGN_CENTER, line);
-        R::Text(640, 400, 2, COL_TEXT, ALIGN_CENTER, keys);
-    }
-
     void DrawList()
     {
-        R::Text(64, 40, 3, COL_TEXT, ALIGN_LEFT, "BUTTON REMAPPER");
-        if (g_PluginLoaded)
-            R::Text(64, 80, 2, COL_LIT, ALIGN_LEFT, "Plugin running - profiles load automatically when a game starts");
-        else
-        {
-            R::Text(64, 80, 2, COL_YELLOW, ALIGN_LEFT, "Plugin not running - profiles won't be applied yet");
-            R::Text(64, 102, 1, COL_DIM, ALIGN_LEFT,
-                    "Add Hdd:\\ControllerWorkshop\\ControllerWorkshopPlugin.xex as a DashLaunch plugin and restart the console (see README).");
-        }
-
-        R::RoundRect(64, 124, 1152, LIST_ROWS * 44 + 16, 12, COL_PANEL);
-        if (g_ListSel < g_ListTop) g_ListTop = g_ListSel;
-        if (g_ListSel >= g_ListTop + LIST_ROWS) g_ListTop = g_ListSel - LIST_ROWS + 1;
-        for (int r = 0; r < LIST_ROWS && g_ListTop + r < g_GameCount; r++)
-        {
-            int i = g_ListTop + r;
-            const GameEntry& g = g_Games[i];
-            float y = 132 + r * 44.0f;
-            bool sel = i == g_ListSel;
-            if (sel)
-                R::RoundRect(72, y, 1120, 40, 8, COL_ACCENT);
-            DWORD c = sel ? COL_SELECTED : COL_TEXT;
-            TextClipped(90, y + 12, 2, c, 46, g.name);
-            if (g.hasProfile)
-            {
-                R::RoundRect(880, y + 8, 104, 24, 6, sel ? RGBA(255, 255, 255, 60) : RGBA(16, 124, 16, 120));
-                R::Text(932, y + 12, 2, sel ? COL_SELECTED : COL_LIT, ALIGN_CENTER, "CUSTOM");
-            }
-            if (g.titleId)
-                R::Textf(1176, y + 12, 2, sel ? c : COL_DIM, ALIGN_RIGHT, "%08X", g.titleId);
-        }
-        // Scrollbar
-        if (g_GameCount > LIST_ROWS)
-        {
-            float h = LIST_ROWS * 44.0f, bar = h * LIST_ROWS / g_GameCount;
-            float pos = (h - bar) * g_ListTop / (g_GameCount - LIST_ROWS);
-            R::Rect(1200, 132, 4, h, COL_PANEL_EDGE);
-            R::Rect(1200, 132 + pos, 4, bar, COL_DIM);
-        }
-
-        R::Text(64, 572, 2, COL_TEXT, ALIGN_LEFT, "A: edit    Y: delete profile    B: back");
-        R::Text(64, 602, 1, COL_DIM, ALIGN_LEFT,
-                "Games appear here once they have been started with the plugin running, or when installed to the hard drive.");
-        R::Text(64, 618, 1, COL_DIM, ALIGN_LEFT,
-                "\"All games\" applies to every game that has no profile of its own.");
+        GameList_Draw(g_List, "BUTTON REMAPPER", g_PluginLoaded,
+                      "\"All games\" applies to every game that has no profile of its own.");
     }
 
     const char* TargetName(signed char t)
@@ -303,8 +207,8 @@ namespace
 
     void DrawEditor(const XINPUT_STATE& cur)
     {
-        const GameEntry& game = g_Games[g_Game];
-        TextClipped(64, 40, 3, COL_TEXT, 46, game.name);
+        const GameEntry& game = g_List.games[g_Game];
+        UI_TextClipped(64, 40, 3, COL_TEXT, 46, game.name);
         if (game.titleId)
             R::Textf(64, 74, 1, COL_DIM, ALIGN_LEFT, "Title ID %08X - profile used every time this game starts", game.titleId);
         else
@@ -367,9 +271,9 @@ namespace
 void RemapUI_Open()
 {
     g_Screen = SCR_LIST;
-    g_ListSel = 0;
-    g_ListTop = 0;
-    g_RepeatDir = 0;
+    g_List.sel = 0;
+    g_List.top = 0;
+    g_Repeat.dir = 0;
     Reload();
 }
 
@@ -382,14 +286,10 @@ bool RemapUI_Update(const XINPUT_STATE& cur, const XINPUT_STATE& prev, float dt)
     {
     case SCR_LIST:
     {
-        char nav = Nav(dt);
-        if (nav == 'U') g_ListSel = (g_ListSel + g_GameCount - 1) % g_GameCount;
-        if (nav == 'D') g_ListSel = (g_ListSel + 1) % g_GameCount;
-        if (nav == 'L') g_ListSel = g_ListSel > LIST_ROWS ? g_ListSel - LIST_ROWS : 0;
-        if (nav == 'R') g_ListSel = g_ListSel + LIST_ROWS < g_GameCount ? g_ListSel + LIST_ROWS : g_GameCount - 1;
+        GameList_Move(g_List, Nav(dt));
         if (Pressed(XINPUT_GAMEPAD_A))
-            OpenEditor(g_ListSel);
-        else if (Pressed(XINPUT_GAMEPAD_Y) && g_Games[g_ListSel].hasProfile)
+            OpenEditor(g_List.sel);
+        else if (Pressed(XINPUT_GAMEPAD_Y) && g_List.games[g_List.sel].hasProfile)
             g_Screen = SCR_CONFIRM_DELETE;
         else if (Pressed(XINPUT_GAMEPAD_B))
             return false;
@@ -425,7 +325,7 @@ bool RemapUI_Update(const XINPUT_STATE& cur, const XINPUT_STATE& prev, float dt)
         if (g_BackHold >= 1.0f)
         {
             g_Screen = SCR_EDIT;
-            g_RepeatDir = 0;
+            g_Repeat.dir = 0;
         }
         break;
     case SCR_CONFIRM_DISCARD:
@@ -446,12 +346,12 @@ void RemapUI_Draw(const XINPUT_STATE& cur)
     {
         DrawList();
         if (g_Screen == SCR_CONFIRM_DELETE)
-            DrawModal("DELETE PROFILE?", g_Games[g_ListSel].name, "A: delete    B: cancel");
+            UI_DrawModal("DELETE PROFILE?", g_List.games[g_List.sel].name, "A: delete    B: cancel");
     }
     else
     {
         DrawEditor(cur);
         if (g_Screen == SCR_CONFIRM_DISCARD)
-            DrawModal("DISCARD CHANGES?", "Your changes to this profile have not been saved.", "A: discard    B: keep editing");
+            UI_DrawModal("DISCARD CHANGES?", "Your changes to this profile have not been saved.", "A: discard    B: keep editing");
     }
 }

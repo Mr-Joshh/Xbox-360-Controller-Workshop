@@ -1,15 +1,18 @@
 // Controller Workshop plugin - DashLaunch system plugin.
-// When a game starts, it loads that game's remap profile (or ALL.ini) written by the Controller
-// Tool app and redirects the game's XamInputGetState import through Remap_Apply. It also records
-// each game it sees (title ID and name) in titles.txt so the app can list them.
+// When a game starts, it loads that game's remap and dead zone profiles (or ALL.ini) written by
+// the Controller Workshop app and redirects the game's XamInputGetState import through
+// Deadzone_Apply and Remap_Apply. It also records each game it sees (title ID and name) in
+// titles.txt so the app can list them.
 #include <xtl.h>
 #include <stdio.h>
 #include "kernel.h"
 #include "hooking.h"
 #include "kfile.h"
 #include "../src/remap.h"
+#include "../src/deadzone.h"
 
-#define REMAP_DIR   CT_DIR_DEVICE "\\Remap"
+#define REMAP_DIR    CT_DIR_DEVICE "\\" CT_REMAP_FOLDER
+#define DEADZONE_DIR CT_DIR_DEVICE "\\" CT_DEADZONE_FOLDER
 #define TITLES_FILE CT_DIR_DEVICE "\\titles.txt"
 #define LOG_FILE    CT_DIR_DEVICE "\\plugin.log"
 
@@ -19,6 +22,7 @@ typedef DWORD (NTAPI *XamInputGetState_t)(DWORD userIndex, DWORD flags, PXINPUT_
 
 static XamInputGetState_t g_OrigGetState;
 static RemapProfile       g_Profile;
+static DeadzoneProfile    g_Deadzone;
 static volatile LONG      g_RemapOn;
 static BOOL               g_Unloading;
 static char               g_FileBuf[64 * 1024];
@@ -27,7 +31,11 @@ static DWORD NTAPI Hook_XamInputGetState(DWORD userIndex, DWORD flags, PXINPUT_S
 {
     DWORD result = g_OrigGetState(userIndex, flags, state);
     if (result == ERROR_SUCCESS && state && g_RemapOn)
+    {
+        // Dead zones work on the physical sticks, so they go first (before any stick swap).
+        Deadzone_Apply(&g_Deadzone, &state->Gamepad);
         Remap_Apply(&g_Profile, &state->Gamepad);
+    }
     return result;
 }
 
@@ -127,23 +135,42 @@ static void RecordTitle(DWORD titleId, const char* name)
     KFileWrite(TITLES_FILE, line, n, TRUE);
 }
 
-// Loads the game's own profile, or ALL.ini for regular games. Returns false if neither applies.
-static bool LoadProfile(DWORD titleId, char* which, int whichSize)
+// Reads the game's own profile from 'dir' into g_FileBuf, or ALL.ini for regular games.
+// Copies the file name used to 'which' ("-" when there is none).
+static bool ReadProfile(const char* dir, DWORD titleId, char* which, int whichSize)
 {
     char path[128];
-    _snprintf(path, sizeof(path), REMAP_DIR "\\%08X.ini", titleId);
+    _snprintf(path, sizeof(path), "%s\\%08X.ini", dir, titleId);
     if (KFileRead(path, g_FileBuf, sizeof(g_FileBuf)))
     {
         _snprintf(which, whichSize, "%08X.ini", titleId);
+        return true;
     }
-    else if (!IsSystemTitle(titleId) && KFileRead(REMAP_DIR "\\" CT_REMAP_ALL ".ini", g_FileBuf, sizeof(g_FileBuf)))
+    _snprintf(path, sizeof(path), "%s\\" CT_REMAP_ALL ".ini", dir);
+    if (!IsSystemTitle(titleId) && KFileRead(path, g_FileBuf, sizeof(g_FileBuf)))
     {
         _snprintf(which, whichSize, CT_REMAP_ALL ".ini");
+        return true;
     }
+    _snprintf(which, whichSize, "-");
+    return false;
+}
+
+// Loads the remap and dead zone profiles. Returns false if neither changes anything.
+static bool LoadProfiles(DWORD titleId, char* which, int whichSize)
+{
+    char remapFile[16], deadzoneFile[16];
+    if (ReadProfile(REMAP_DIR, titleId, remapFile, sizeof(remapFile)))
+        Remap_Parse(g_FileBuf, &g_Profile, NULL, 0);
     else
-        return false;
-    Remap_Parse(g_FileBuf, &g_Profile, NULL, 0);
-    return !Remap_IsDefault(&g_Profile);
+        Remap_Default(&g_Profile);
+    if (ReadProfile(DEADZONE_DIR, titleId, deadzoneFile, sizeof(deadzoneFile)))
+        Deadzone_Parse(g_FileBuf, &g_Deadzone, NULL, 0);
+    else
+        Deadzone_Default(&g_Deadzone);
+    _snprintf(which, whichSize, "remap %s, dead zones %s (L %d%% R %d%%)", remapFile, deadzoneFile,
+              g_Deadzone.left, g_Deadzone.right);
+    return !Remap_IsDefault(&g_Profile) || !Deadzone_IsDefault(&g_Deadzone);
 }
 
 static DWORD WINAPI MainThread(LPVOID)
@@ -157,9 +184,10 @@ static DWORD WINAPI MainThread(LPVOID)
             Sleep(500);
     }
     KCreateDir(REMAP_DIR);
+    KCreateDir(DEADZONE_DIR);
     LogInit(LOG_FILE);
     g_OrigGetState = (XamInputGetState_t)ResolveFunction(MODULE_XAM, ORD_XamInputGetState);
-    Log("Controller Workshop plugin 0.1 loaded. XamInputGetState at %08X", (DWORD)g_OrigGetState);
+    Log("Controller Workshop plugin 0.2 loaded. XamInputGetState at %08X", (DWORD)g_OrigGetState);
 
     // Per title: wait for its module to load, read its name and profile, then hook (retrying,
     // because the title ID changes before the loader has resolved the game's imports).
@@ -188,15 +216,15 @@ static DWORD WINAPI MainThread(LPVOID)
             if (!IsSystemTitle(titleId))
                 RecordTitle(titleId, name);
 
-            char which[32];
-            if (LoadProfile(titleId, which, sizeof(which)) && g_OrigGetState)
+            char which[96];
+            if (LoadProfiles(titleId, which, sizeof(which)) && g_OrigGetState)
             {
                 Log("%08X %s: using %s", titleId, name, which);
                 state = WAIT_HOOK;
             }
             else
             {
-                Log("%08X %s: no remap", titleId, name);
+                Log("%08X %s: no remap or dead zones", titleId, name);
                 state = IDLE;
             }
         }

@@ -67,6 +67,9 @@
     <ClCompile Include="..\src\games.cpp" />
     <ClCompile Include="..\src\remap.cpp" />
     <ClCompile Include="..\src\remap_ui.cpp" />
+    <ClCompile Include="..\src\deadzone.cpp" />
+    <ClCompile Include="..\src\deadzone_ui.cpp" />
+    <ClCompile Include="..\src\gamelist_ui.cpp" />
     <ClCompile Include="..\src\system.cpp" />
     <ClCompile Include="..\src\theme.cpp" />
   </ItemGroup>
@@ -78,6 +81,9 @@
     <ClInclude Include="..\src\games.h" />
     <ClInclude Include="..\src\remap.h" />
     <ClInclude Include="..\src\remap_ui.h" />
+    <ClInclude Include="..\src\deadzone.h" />
+    <ClInclude Include="..\src\deadzone_ui.h" />
+    <ClInclude Include="..\src\gamelist_ui.h" />
     <ClInclude Include="..\src\system.h" />
     <ClInclude Include="..\src\theme.h" />
   </ItemGroup>

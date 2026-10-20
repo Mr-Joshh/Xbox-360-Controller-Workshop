@@ -33,6 +33,7 @@ extern const char* const g_InputNames[IN_COUNT];   // "A", "B", ... "LT", "RT"
 #define CT_DIR_DEVICE  "\\Device\\Harddisk0\\Partition1\\ControllerWorkshop"
 #define CT_DIR_HDD     "Hdd:\\ControllerWorkshop"
 #define CT_REMAP_ALL   "ALL"
+#define CT_REMAP_FOLDER "Remap"
 #define CT_PLUGIN_NAME "ControllerWorkshopPlugin.xex"
 
 void Remap_Default(RemapProfile* p);
