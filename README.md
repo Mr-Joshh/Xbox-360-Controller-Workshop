@@ -211,6 +211,12 @@ Good to know:
 - Remap and dead zone changes apply the next time the game starts.
 - A dead zone only covers the sticks; the triggers keep their normal behavior.
 
+## AI disclosure
+
+This is an AI-assisted project. Much of the code, tooling and documentation was written with
+the help of Claude, under the author's direction. The author
+reviewed the changes and tested them on a real Xbox 360.
+
 ## Credits
 
 - 8x8 font: [font8x8](https://github.com/dhepper/font8x8) by Daniel Hepper (public domain),
