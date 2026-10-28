@@ -40,15 +40,14 @@ game starts.
 **Dead zone configuration (drift fix)**
 - Stops a drifting stick from moving your character or camera on its own.
 - Pick a dead zone size for each stick (1-50%), or let the app measure your drift and pick one.
-- Per-game profiles plus an "All games" default, separate from button remaps, so one setting can
-  fix a worn stick in every game.
+- Per-game profiles plus an "All games" default.
 - Applied by the same plugin when the game starts.
 
 **Trigger configuration**
 - Fixes a worn trigger that never reaches 255 (so it never fully presses in games), or one that
   doesn't come all the way back.
 - Set where each trigger starts and where it counts as fully pressed, or let the app measure them.
-- Per-game profiles plus an "All games" default, applied by the same plugin.
+- Per-game profiles plus an "All games" default.
 
 **Light and dark themes**
 
