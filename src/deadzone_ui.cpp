@@ -5,6 +5,7 @@
 #include "gamelist_ui.h"
 #include "system.h"
 #include "theme.h"
+#include "restmeasure.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,19 +15,7 @@ namespace
     enum Screen { SCR_LIST, SCR_EDIT, SCR_MEASURE, SCR_CONFIRM_DISCARD, SCR_CONFIRM_DELETE };
 
     const int   EDIT_ROWS = 2;
-
-    // Drift measurement: both sticks are pushed in each direction and let go, and the resting
-    // position after each release is sampled. A worn stick settles in a different spot depending on
-    // where it came back from, so the worst of the four is used.
-    enum MeasurePhase { MP_PUSH, MP_RELEASE, MP_SETTLE, MP_SAMPLE };
-    const int   MEASURE_STEPS = 4;
-    const float MEASURE_PUSHED = 0.6f;    // stick travel toward the asked direction that counts as pushed
-    const float MEASURE_LET_GO = 0.55f;   // above this the stick is still being held (dead zones stop at 50%)
-    const float MEASURE_SETTLE = 0.3f;    // seconds for the stick to spring back
-    const float MEASURE_SAMPLE = 0.7f;    // seconds of sampling per direction
-    const int   MEASURE_MARGIN = 2;       // percent added above the measured drift
-    const char* const g_StepNames[MEASURE_STEPS] = { "UP", "RIGHT", "DOWN", "LEFT" };
-    const float g_StepDir[MEASURE_STEPS][2] = { { 0, 1 }, { 1, 0 }, { 0, -1 }, { -1, 0 } };
+    const int   MEASURE_MARGIN = 2;       // percent added above the measured drift (see restmeasure.h)
 
     Screen          g_Screen;
     GameList        g_List;
@@ -40,10 +29,7 @@ namespace
     char            g_FileBuf[4 * 1024];
     NavRepeat       g_Repeat;
 
-    int             g_MeasureStep;
-    MeasurePhase    g_MeasurePhase;
-    float           g_MeasureTimer;
-    float           g_MeasureMax[2];
+    RestMeasure     g_Measure;
     bool            g_Measured;
 
     const XINPUT_STATE* g_Cur;
@@ -149,10 +135,7 @@ namespace
 
     void StartMeasure()
     {
-        g_MeasureStep = 0;
-        g_MeasurePhase = MP_PUSH;
-        g_MeasureTimer = 0;
-        g_MeasureMax[0] = g_MeasureMax[1] = 0;
+        RestMeasure_Start(g_Measure);
         g_Screen = SCR_MEASURE;
     }
 
@@ -162,7 +145,7 @@ namespace
         bool tooBig = false;
         for (int k = 0; k < 2; k++)
         {
-            int pct = (int)ceilf(g_MeasureMax[k] * 100) + MEASURE_MARGIN;
+            int pct = (int)ceilf(g_Measure.worst[k] * 100) + MEASURE_MARGIN;
             if (pct > DZ_MAX_PERCENT)
             {
                 pct = DZ_MAX_PERCENT;
@@ -179,65 +162,6 @@ namespace
         SetStatus(text, COL_YELLOW);
         g_Screen = SCR_EDIT;
         g_Repeat.dir = 0;
-    }
-
-    void UpdateMeasure(const XINPUT_GAMEPAD& g, float dt)
-    {
-        static float stepMax[2];
-        float m[2] = { Magnitude(g.sThumbLX, g.sThumbLY), Magnitude(g.sThumbRX, g.sThumbRY) };
-        bool letGo = m[0] < MEASURE_LET_GO && m[1] < MEASURE_LET_GO;
-        switch (g_MeasurePhase)
-        {
-        case MP_PUSH:
-        {
-            const float* d = g_StepDir[g_MeasureStep];
-            float l = (g.sThumbLX * d[0] + g.sThumbLY * d[1]) / 32767.0f;
-            float r = (g.sThumbRX * d[0] + g.sThumbRY * d[1]) / 32767.0f;
-            if (l > MEASURE_PUSHED && r > MEASURE_PUSHED)
-                g_MeasurePhase = MP_RELEASE;
-            break;
-        }
-        case MP_RELEASE:
-            if (letGo)
-            {
-                g_MeasurePhase = MP_SETTLE;
-                g_MeasureTimer = 0;
-            }
-            break;
-        case MP_SETTLE:
-        case MP_SAMPLE:
-            // Touched again: wait for the next release. Only a full sample counts.
-            if (!letGo)
-            {
-                g_MeasurePhase = MP_RELEASE;
-                break;
-            }
-            g_MeasureTimer += dt;
-            if (g_MeasurePhase == MP_SETTLE)
-            {
-                if (g_MeasureTimer >= MEASURE_SETTLE)
-                {
-                    g_MeasurePhase = MP_SAMPLE;
-                    g_MeasureTimer = 0;
-                    stepMax[0] = stepMax[1] = 0;
-                }
-                break;
-            }
-            for (int k = 0; k < 2; k++)
-                if (m[k] > stepMax[k])
-                    stepMax[k] = m[k];
-            if (g_MeasureTimer >= MEASURE_SAMPLE)
-            {
-                for (int k = 0; k < 2; k++)
-                    if (stepMax[k] > g_MeasureMax[k])
-                        g_MeasureMax[k] = stepMax[k];
-                if (++g_MeasureStep == MEASURE_STEPS)
-                    FinishMeasure();
-                else
-                    g_MeasurePhase = MP_PUSH;
-            }
-            break;
-        }
     }
 
     // ----------------------------------------------------------------------------------
@@ -342,8 +266,8 @@ namespace
             R::Text(tx, my, 2, COL_TEXT, ALIGN_LEFT, "LAST MEASUREMENT");
             for (int k = 0; k < 2; k++)
             {
-                float drift = g_MeasureMax[k] * 100;
-                bool games = g_MeasureMax[k] > GameDeadzone(k);
+                float drift = g_Measure.worst[k] * 100;
+                bool games = g_Measure.worst[k] > GameDeadzone(k);
                 R::Textf(tx, my + 28 + k * 22.0f, 2, games ? COL_ORANGE : COL_LIT, ALIGN_LEFT, "%s %5.1f%%",
                          k == 0 ? "Left  drift" : "Right drift", drift);
                 R::Text(tx + 300, my + 32 + k * 22.0f, 1, COL_DIM, ALIGN_LEFT,
@@ -358,39 +282,6 @@ namespace
             R::Text(64, 614, 2, g_StatusColor, ALIGN_LEFT, g_Status);
         else if (Dirty())
             R::Text(64, 614, 2, COL_YELLOW, ALIGN_LEFT, "Unsaved changes - press START to save");
-    }
-
-    void DrawMeasure()
-    {
-        R::Rect(0, 0, SCREEN_W, SCREEN_H, COL_SHADE);
-        R::RoundRect(317, 227, 646, 266, 16, COL_ACCENT);
-        R::RoundRect(320, 230, 640, 260, 14, COL_PANEL);
-        R::Text(640, 250, 3, COL_TEXT, ALIGN_CENTER, "MEASURING DRIFT");
-        R::Textf(640, 284, 1, COL_DIM, ALIGN_CENTER, "Step %d of %d", g_MeasureStep + 1, MEASURE_STEPS);
-        if (g_MeasurePhase == MP_PUSH)
-        {
-            R::Textf(640, 314, 2, COL_YELLOW, ALIGN_CENTER, "Push both sticks %s all the way", g_StepNames[g_MeasureStep]);
-            R::Text(640, 344, 2, COL_TEXT, ALIGN_CENTER, "then let go");
-        }
-        else if (g_MeasurePhase == MP_RELEASE)
-            R::Text(640, 314, 2, COL_YELLOW, ALIGN_CENTER, "Let go of both sticks");
-        else
-        {
-            float t = (g_MeasurePhase == MP_SAMPLE ? MEASURE_SETTLE : 0) + g_MeasureTimer;
-            t /= MEASURE_SETTLE + MEASURE_SAMPLE;
-            R::Text(640, 314, 2, COL_TEXT, ALIGN_CENTER, "Measuring - hands off");
-            R::Rect(400, 344, 480, 20, COL_WELL);
-            R::Rect(400, 344, 480 * (t > 1 ? 1 : t), 20, COL_LIT);
-            R::RectOutline(400, 344, 480, 20, 2, COL_PANEL_EDGE);
-        }
-
-        // Directions: done, current, still to do.
-        for (int i = 0; i < MEASURE_STEPS; i++)
-        {
-            DWORD c = i < g_MeasureStep ? COL_LIT : (i == g_MeasureStep ? COL_TEXT : COL_FAINT);
-            R::Text(460 + i * 120.0f, 396, 2, c, ALIGN_CENTER, g_StepNames[i]);
-        }
-        R::Text(640, 448, 1, COL_DIM, ALIGN_CENTER, "B: cancel");
     }
 }
 
@@ -447,7 +338,8 @@ bool DeadzoneUI_Update(const XINPUT_STATE& cur, const XINPUT_STATE& prev, float 
             g_Screen = SCR_EDIT;
             break;
         }
-        UpdateMeasure(cur.Gamepad, dt);
+        if (RestMeasure_Update(g_Measure, cur.Gamepad, dt))
+            FinishMeasure();
         break;
     case SCR_CONFIRM_DISCARD:
         if (Pressed(XINPUT_GAMEPAD_A)) g_Screen = SCR_LIST;
@@ -478,7 +370,7 @@ void DeadzoneUI_Draw(const XINPUT_STATE& cur)
             ZeroMemory(&shown.Gamepad, sizeof(shown.Gamepad));
         DrawEditor(shown);
         if (g_Screen == SCR_MEASURE)
-            DrawMeasure();
+            RestMeasure_Draw(g_Measure, "MEASURING DRIFT");
         if (g_Screen == SCR_CONFIRM_DISCARD)
             UI_DrawModal("DISCARD CHANGES?", "Your dead zone changes have not been saved.", "A: discard    B: keep editing");
     }

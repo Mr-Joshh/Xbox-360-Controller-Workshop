@@ -1,11 +1,11 @@
 # Controller Workshop
 
-A controller tester, per-game button remapper and stick drift fix for modded (RGH/JTAG) Xbox 360
-consoles.
+A controller tester, per-game button remapper, stick drift fix and trigger fix for modded
+(RGH/JTAG) Xbox 360 consoles.
 
 Test every button, stick and trigger on your controller, check for stick drift
-and worn-out spots, and try the rumble motors. Then remap buttons or set
-stick dead zones for any game. A small DashLaunch plugin applies your settings every time that
+and worn-out spots, and try the rumble motors. Then remap buttons, set
+stick dead zones or fix worn triggers for any game. A small DashLaunch plugin applies your settings every time that
 game starts.
 
 ![Controller Workshop, dark theme](docs/tester-dark.png)
@@ -23,8 +23,9 @@ game starts.
 - Stick panels: raw values (-32768..32767) and percentages, a motion trail, and an outline
   of the furthest point reached in 64 directions, which shows worn sticks that can't reach the edge.
 - Trigger bars with the highest value reached, so you can spot a trigger that never gets to 255.
-- Drift test: put the controller down and it measures how far each stick and trigger rests from
-  center, then rates them GOOD / SLIGHT / DRIFT (sticks) and GOOD / STUCK (triggers).
+- Drift test: push both sticks up, right, down and left, letting go after each, and it measures
+  where each stick comes to rest every time (and where the triggers rest), then rates them
+  GOOD / SLIGHT / DRIFT (sticks) and GOOD / STUCK (triggers).
 - Rumble test: drive each motor by hand with the triggers.
 - Battery level for wireless controllers, up to 4 controllers, and the Guide button's ring of
   light shows which port you're looking at.
@@ -43,6 +44,12 @@ game starts.
   fix a worn stick in every game.
 - Applied by the same plugin when the game starts.
 
+**Trigger configuration**
+- Fixes a worn trigger that never reaches 255 (so it never fully presses in games), or one that
+  doesn't come all the way back.
+- Set where each trigger starts and where it counts as fully pressed, or let the app measure them.
+- Per-game profiles plus an "All games" default, applied by the same plugin.
+
 **Light and dark themes**
 
 | Dark | Light |
@@ -52,7 +59,8 @@ game starts.
 ## Requirements
 
 - An RGH or JTAG Xbox 360 that runs unsigned code (dev-kit-signed XEXs, as built by the SDK).
-- **DashLaunch** for the button remapper and stick dead zones (the plugin loads through it). The
+- **DashLaunch** for the button remapper, stick dead zones and trigger configuration (the plugin
+  loads through it). The
   tester works without it.
 
 ## Install
@@ -60,11 +68,12 @@ game starts.
 1. Download `default.xex` and `ControllerWorkshopPlugin.xex` from the
    [Releases](../../releases) page and copy both to **`Hdd:\ControllerWorkshop\`** on the console.
    - `default.xex` is the app.
-   - `ControllerWorkshopPlugin.xex` is the plugin that applies remaps and dead zones in games.
+   - `ControllerWorkshopPlugin.xex` is the plugin that applies remaps, dead zones and trigger
+     settings in games.
 
    The app can live anywhere (for example `Hdd:\Apps\ControllerWorkshop\`), but its settings and
    profiles always go to `Hdd:\ControllerWorkshop\`.
-2. For the remapper and dead zones, add the plugin to DashLaunch's `launch.ini` under `[Plugins]`, in a free
+2. For the remapper, dead zones and trigger configuration, add the plugin to DashLaunch's `launch.ini` under `[Plugins]`, in a free
    slot (`plugin1` to `plugin5`), then restart the console:
    ```ini
    [Plugins]
@@ -101,16 +110,19 @@ menu or a test is open, presses aren't counted and the tester behind it shows a 
 |---|---|
 | Controller | **Auto**, or lock to one connected port. Only ports with a connected controller are offered. |
 | Rumble test | LT and RT drive the left (heavy) and right (light) motors. B = back. |
-| Drift test | Let go of the controller. After a 2-second countdown it measures for 2 seconds and shows the results. |
+| Drift test | Push both sticks up, right, down and left as asked, letting go after each one. After each release it measures where the sticks and triggers rest (hands off for a second), then shows the results. B cancels. |
 | Button remapper | See below. |
 | Dead zone configuration | See below. |
+| Trigger configuration | See below. |
 | Theme | Dark or Light (left/right or A). Remembered between sessions. |
 | Reset stats | Clears the button check, press counts, reach outline and drift results for the shown controller. |
 | Exit to dashboard | Goes back to the dashboard. |
 
 ### Reading the results
 
-- **Stick drift**: run the drift test. Under 10% is normal, 10-20% is slight wear, over 20% will
+- **Stick drift**: run the drift test. The results show where each stick came to rest after each
+  push, and the worst of the four is the stick's drift: a worn stick often rests further out after
+  coming back from one particular side. Under 10% is normal, 10-20% is slight wear, over 20% will
   show up in games as movement you didn't make. You can also watch the dot: it should come back to
   the middle when you let go. To fix drift in games, use **Dead zone configuration**.
 - **Worn sticks**: spin each stick slowly around its edge. The blue outline should be a nearly full
@@ -119,7 +131,8 @@ menu or a test is open, presses aren't counted and the tester behind it shows a 
   in the corners of its square gate.
 - **Dead buttons**: press everything once. Anything still gray in the button check didn't register.
 - **Triggers**: pull each one all the way. "Full range OK" means it reaches 255. A trigger resting
-  above 30 in the drift test is reported as STUCK, because games treat it as held.
+  above 30 in the drift test is reported as STUCK, because games treat it as held. To fix either
+  in games, use **Trigger configuration**.
 
 ![Drift test results](docs/drift-results.png)
 
@@ -188,13 +201,52 @@ Good to know:
   always shows your real stick), and a profile applies to every connected controller.
 - Setting both sticks to OFF and saving deletes the profile.
 
+## Using trigger configuration
+
+Open **Trigger configuration** from the menu and pick a game, or **All games** to fix a trigger in
+every game without its own trigger profile. The list works like the others (A: edit, Y: delete
+profile, B: back; CUSTOM = has a trigger profile).
+
+Each trigger has two settings, in the trigger's raw values (0-255):
+- **Start point**: below this the game sees the trigger as released. Raise it for a trigger that
+  doesn't come all the way back.
+- **Full press**: from this value up the game sees the trigger fully pressed (255). Lower it for a
+  trigger that stops short. For example, a trigger that only reaches 230 with a full press point of
+  227 gives the game 255 when pulled all the way.
+
+In between, the trigger's travel is stretched to cover the whole 0-255 range, so it still works as
+a smooth analog trigger. Press **Y** to measure: pull LT all the way and let go, then RT. The full
+press point is set just below the highest value each one reached, and the start point just above
+where it came to rest. The **WHAT THE GAME SEES** panel is live: the top bar of each trigger is the
+real value, the bottom bar is what the game gets, and it remembers the highest value you reached.
+
+| Button | Action |
+|---|---|
+| D-pad up/down | Choose a setting |
+| D-pad left/right | Change it (hold to speed up). Start point 0-100, full press 128-255 |
+| Y | Measure both triggers (B cancels) |
+| X | Back to the normal range (0-255) on both triggers |
+| START | Save |
+| B | Back (asks first if you have unsaved changes) |
+
+![Trigger editor](docs/trigger-editor.png)
+
+Good to know:
+- Trigger settings are applied before any remapping, so they follow the physical trigger even if you
+  swap LT and RT in the remapper.
+- Like remaps and dead zones: applied when the game starts, a game's own profile beats **All
+  games**, **All games** never applies to dashboards, Aurora, FSD, XeXMenu or Controller Workshop
+  (so the tester always shows your real trigger), and a profile applies to every connected controller.
+- Saving the normal range (start 0, full press 255 on both) deletes the profile.
+
 ## Troubleshooting
 
 - **The remapper says "Plugin not running".** Check the `launch.ini` line points to
   `Hdd:\ControllerWorkshop\ControllerWorkshopPlugin.xex` and that you restarted the console. If
   `Hdd:\ControllerWorkshop\plugin.log` doesn't exist, the plugin didn't load.
-- **A remap or dead zone doesn't work in a game.** Look in `plugin.log`. For each game it logs the
-  title ID, the name, which remap and dead zone profiles it used (with both dead zone sizes), and
+- **A remap, dead zone or trigger setting doesn't work in a game.** Look in `plugin.log`. For each
+  game it logs the title ID, the name, which remap, dead zone and trigger profiles it used (with the
+  dead zone sizes and trigger ranges), and
   either "remap active" or why it gave up. The plugin changes
   input that games read through the standard XInput function. A game that reads the controller
   another way won't be affected.
@@ -207,9 +259,8 @@ Good to know:
 ## Known limitations
 
 - The Guide button can't be tested or remapped; the system keeps it for itself.
-- Remap and dead zone profiles apply to all connected controllers, not per controller.
-- Remap and dead zone changes apply the next time the game starts.
-- A dead zone only covers the sticks; the triggers keep their normal behavior.
+- Remap, dead zone and trigger profiles apply to all connected controllers, not per controller.
+- Remap, dead zone and trigger changes apply the next time the game starts.
 
 ## AI disclosure
 

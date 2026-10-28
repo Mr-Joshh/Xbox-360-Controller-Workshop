@@ -1,6 +1,6 @@
 // main.cpp - Controller Workshop for Xbox 360.
 // Shows a live controller diagram, detailed stick plots (outer reach, trail),
-// trigger bars, a button checklist, a hands-off drift test and a rumble test.
+// trigger bars, a button checklist, a drift test and a rumble test.
 #include <xtl.h>
 #include <math.h>
 #include <stdio.h>
@@ -11,6 +11,8 @@
 #include "system.h"
 #include "remap_ui.h"
 #include "deadzone_ui.h"
+#include "trigger_ui.h"
+#include "restmeasure.h"
 
 const float PI = 3.14159265f;
 
@@ -61,8 +63,8 @@ struct StickStats
     float trailX[TRAIL], trailY[TRAIL];
     int   trailHead;
     bool  restMeasured;
-    float restMax;              // largest magnitude seen during the hands-off test
-    float restX, restY;         // average position during the hands-off test
+    float restMax;              // worst resting distance from center in the drift test
+    float restDir[REST_STEPS];  // resting distance after each push (UP, RIGHT, DOWN, LEFT)
 };
 
 struct PadState
@@ -90,7 +92,7 @@ static PadState g_Pads[XUSER_MAX_COUNT];
 //--------------------------------------------------------------------------------------
 // App state
 //--------------------------------------------------------------------------------------
-enum Mode { MODE_TEST, MODE_MENU, MODE_RUMBLE, MODE_DRIFT, MODE_DRIFT_RESULT, MODE_REMAP, MODE_DEADZONE };
+enum Mode { MODE_TEST, MODE_MENU, MODE_RUMBLE, MODE_DRIFT, MODE_DRIFT_RESULT, MODE_REMAP, MODE_DEADZONE, MODE_TRIGGER };
 
 static Mode  g_Mode = MODE_TEST;
 static int   g_PortChoice = -1;          // -1 = auto
@@ -107,14 +109,8 @@ static float g_ToastTime = 0.0f;
 // Rumble test
 static float g_RumbleL = 0.0f, g_RumbleR = 0.0f;
 
-// Drift test
-static float g_DriftTimer = 0.0f;
-static int   g_DriftSamples = 0;
-static float g_DriftSum[2][2];
-static float g_DriftMax[2];
-static BYTE  g_DriftTrig[2];
-const float  DRIFT_WAIT = 2.0f;          // seconds to let go
-const float  DRIFT_SAMPLE = 2.0f;        // seconds of sampling
+// Drift test: push both sticks each way and let go (see restmeasure.h)
+static RestMeasure g_Drift;
 
 //--------------------------------------------------------------------------------------
 // Helpers
@@ -293,7 +289,7 @@ static void UpdateStats(PadState& p)
 //--------------------------------------------------------------------------------------
 enum MenuItem
 {
-    MI_PORT, MI_RUMBLE, MI_DRIFT, MI_REMAP, MI_DEADZONE, MI_THEME, MI_RESET, MI_EXIT, MI_COUNT
+    MI_PORT, MI_RUMBLE, MI_DRIFT, MI_REMAP, MI_DEADZONE, MI_TRIGGER, MI_THEME, MI_RESET, MI_EXIT, MI_COUNT
 };
 
 // Next port choice in direction 'dir' (+1/-1): Auto (-1) or a port with a controller connected.
@@ -340,11 +336,7 @@ static bool Pressed(const PadState& p, WORD mask)
 static void StartDriftTest()
 {
     g_Mode = MODE_DRIFT;
-    g_DriftTimer = 0.0f;
-    g_DriftSamples = 0;
-    ZeroMemory(g_DriftSum, sizeof(g_DriftSum));
-    ZeroMemory(g_DriftMax, sizeof(g_DriftMax));
-    ZeroMemory(g_DriftTrig, sizeof(g_DriftTrig));
+    RestMeasure_Start(g_Drift);
 }
 
 static void UpdateMenu(PadState& p, float dt)
@@ -390,6 +382,10 @@ static void UpdateMenu(PadState& p, float dt)
             DeadzoneUI_Open();
             g_Mode = MODE_DEADZONE;
             break;
+        case MI_TRIGGER:
+            TriggerUI_Open();
+            g_Mode = MODE_TRIGGER;
+            break;
         case MI_RESET:
             ResetStats(p);
             Toast("Stats reset");
@@ -432,39 +428,21 @@ static void UpdateDrift(PadState& p, float dt)
         g_Mode = MODE_TEST;
         return;
     }
-    g_DriftTimer += dt;
-    if (g_DriftTimer < DRIFT_WAIT)
+    if (!RestMeasure_Update(g_Drift, p.state.Gamepad, dt))
         return;
 
     for (int k = 0; k < 2; k++)
     {
-        float x, y;
-        StickXY(p.state, k, x, y);
-        g_DriftSum[k][0] += x;
-        g_DriftSum[k][1] += y;
-        float mag = sqrtf(x * x + y * y);
-        if (mag > g_DriftMax[k])
-            g_DriftMax[k] = mag;
+        StickStats& st = p.stick[k];
+        st.restMeasured = true;
+        st.restMax = g_Drift.worst[k];
+        for (int d = 0; d < REST_STEPS; d++)
+            st.restDir[d] = g_Drift.dirMax[d][k];
     }
-    if (p.state.Gamepad.bLeftTrigger > g_DriftTrig[0])  g_DriftTrig[0] = p.state.Gamepad.bLeftTrigger;
-    if (p.state.Gamepad.bRightTrigger > g_DriftTrig[1]) g_DriftTrig[1] = p.state.Gamepad.bRightTrigger;
-    g_DriftSamples++;
-
-    if (g_DriftTimer >= DRIFT_WAIT + DRIFT_SAMPLE && g_DriftSamples > 0)
-    {
-        for (int k = 0; k < 2; k++)
-        {
-            StickStats& st = p.stick[k];
-            st.restMeasured = true;
-            st.restMax = g_DriftMax[k];
-            st.restX = g_DriftSum[k][0] / g_DriftSamples;
-            st.restY = g_DriftSum[k][1] / g_DriftSamples;
-        }
-        p.trigRestMeasured = true;
-        p.trigRest[0] = g_DriftTrig[0];
-        p.trigRest[1] = g_DriftTrig[1];
-        g_Mode = MODE_DRIFT_RESULT;
-    }
+    p.trigRestMeasured = true;
+    p.trigRest[0] = g_Drift.trigMax[0];
+    p.trigRest[1] = g_Drift.trigMax[1];
+    g_Mode = MODE_DRIFT_RESULT;
 }
 
 static void UpdateDriftResult(PadState& p)
@@ -922,13 +900,13 @@ static void DrawModalBox(float w, float h, const char* title)
 
 static void DrawMenu()
 {
-    DrawModalBox(560, 420, "MENU");
+    DrawModalBox(560, 460, "MENU");
     static const char* names[MI_COUNT] =
     {
         "Controller", "Rumble test", "Drift test", "Button remapper", "Dead zone configuration",
-        "Theme", "Reset stats", "Exit to dashboard"
+        "Trigger configuration", "Theme", "Reset stats", "Exit to dashboard"
     };
-    float x = 380, y = 220;
+    float x = 380, y = 200;
     for (int i = 0; i < MI_COUNT; i++, y += 40)
     {
         bool sel = i == g_MenuSel;
@@ -975,58 +953,60 @@ static void DrawRumble(const PadState& p)
         R::Text(640, y + 34, 1, COL_YELLOW, ALIGN_CENTER, "This device does not report rumble motors");
 }
 
-static void DrawDrift()
-{
-    DrawModalBox(640, 260, "DRIFT TEST");
-    if (g_DriftTimer < DRIFT_WAIT)
-    {
-        R::Text(640, 300, 2, COL_TEXT, ALIGN_CENTER, "Let go of both sticks and triggers");
-        R::Textf(640, 340, 3, COL_YELLOW, ALIGN_CENTER, "Starting in %d", (int)(DRIFT_WAIT - g_DriftTimer) + 1);
-    }
-    else
-    {
-        R::Text(640, 300, 2, COL_TEXT, ALIGN_CENTER, "Measuring - keep your hands off");
-        DrawBar(400, 340, 480, 24, (g_DriftTimer - DRIFT_WAIT) / DRIFT_SAMPLE, COL_LIT);
-    }
-    R::Text(640, 410, 1, COL_DIM, ALIGN_CENTER, "B: cancel");
-}
-
 static void DrawDriftResult(const PadState& p)
 {
-    DrawModalBox(800, 380, "DRIFT TEST RESULTS");
-    float y = 240;
-    R::Text(510, y, 1, COL_DIM, ALIGN_LEFT, "average resting position");
-    R::Text(880, y, 1, COL_DIM, ALIGN_RIGHT, "worst");
-    R::Text(1010, y, 1, COL_DIM, ALIGN_RIGHT, "result");
+    DrawModalBox(900, 400, "DRIFT TEST RESULTS");
+    // Columns: name, the four directions, worst, result (values right-aligned on these x).
+    static const float dirX[REST_STEPS] = { 510, 610, 710, 810 };
+    const float worstX = 920, resultX = 1060;
+    float y = 232;
+    R::Text(620, y, 1, COL_DIM, ALIGN_CENTER, "resting position after each push");
+    y += 16;
+    static const char* dirNames[REST_STEPS] = { "up", "right", "down", "left" };
+    for (int d = 0; d < REST_STEPS; d++)
+        R::Text(dirX[d], y, 1, COL_DIM, ALIGN_RIGHT, dirNames[d]);
+    R::Text(worstX, y, 1, COL_DIM, ALIGN_RIGHT, "worst");
+    R::Text(resultX, y, 1, COL_DIM, ALIGN_RIGHT, "result");
     y += 20;
 
+    bool problem = false;
     static const char* stickNames[2] = { "Left stick", "Right stick" };
-    for (int k = 0; k < 2; k++, y += 36)
+    for (int k = 0; k < 2; k++, y += 40)
     {
         const StickStats& st = p.stick[k];
         DWORD c;
         const char* verdict = DriftVerdict(st.restMax, &c);
-        R::Text(270, y, 2, COL_TEXT, ALIGN_LEFT, stickNames[k]);
-        R::Textf(510, y, 2, COL_DIM, ALIGN_LEFT, "X %+5.1f%% Y %+5.1f%%", st.restX * 100, st.restY * 100);
-        R::Textf(880, y, 2, c, ALIGN_RIGHT, "%.1f%%", st.restMax * 100);
-        R::Text(1010, y, 2, c, ALIGN_RIGHT, verdict);
+        if (st.restMax >= 0.10f) problem = true;
+        R::Text(220, y, 2, COL_TEXT, ALIGN_LEFT, stickNames[k]);
+        for (int d = 0; d < REST_STEPS; d++)
+        {
+            DWORD dc;
+            DriftVerdict(st.restDir[d], &dc);
+            R::Textf(dirX[d], y, 2, st.restDir[d] < 0.10f ? COL_DIM : dc, ALIGN_RIGHT, "%.1f%%", st.restDir[d] * 100);
+        }
+        R::Textf(worstX, y, 2, c, ALIGN_RIGHT, "%.1f%%", st.restMax * 100);
+        R::Text(resultX, y, 2, c, ALIGN_RIGHT, verdict);
     }
 
     static const char* trigNames[2] = { "Left trigger", "Right trigger" };
-    for (int t = 0; t < 2; t++, y += 36)
+    for (int t = 0; t < 2; t++, y += 40)
     {
         bool stuck = p.trigRest[t] > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+        if (stuck) problem = true;
         DWORD c = stuck ? COL_RED : COL_LIT;
-        R::Text(270, y, 2, COL_TEXT, ALIGN_LEFT, trigNames[t]);
-        R::Textf(880, y, 2, c, ALIGN_RIGHT, "%d", p.trigRest[t]);
-        R::Text(1010, y, 2, c, ALIGN_RIGHT, stuck ? "STUCK" : "GOOD");
+        R::Text(220, y, 2, COL_TEXT, ALIGN_LEFT, trigNames[t]);
+        R::Textf(worstX, y, 2, c, ALIGN_RIGHT, "%d", p.trigRest[t]);
+        R::Text(resultX, y, 2, c, ALIGN_RIGHT, stuck ? "STUCK" : "GOOD");
     }
 
-    y += 10;
+    y += 6;
     R::Text(640, y, 1, COL_DIM, ALIGN_CENTER, "Sticks: under 10% is normal, 10-20% is slight wear, over 20% shows up in games.");
     R::Text(640, y + 14, 1, COL_DIM, ALIGN_CENTER, "Triggers: resting above 30 of 255 counts as pressed in games.");
-    R::Text(640, y + 28, 1, COL_DIM, ALIGN_CENTER, "The stick results also stay in each stick panel.");
-    R::Text(640, y + 54, 2, COL_TEXT, ALIGN_CENTER, "A: close");
+    if (problem)
+        R::Text(640, y + 28, 1, COL_YELLOW, ALIGN_CENTER, "Dead zone configuration and Trigger configuration in the menu can fix this in games.");
+    else
+        R::Text(640, y + 28, 1, COL_DIM, ALIGN_CENTER, "The stick results also stay in each stick panel.");
+    R::Text(640, y + 64, 2, COL_TEXT, ALIGN_CENTER, "A: close");
 }
 
 // The tester screen plus whatever box is open on top of it (also used by the PC layout preview).
@@ -1047,7 +1027,7 @@ static void DrawTester(const PadState& p, Mode mode)
     DrawFooter();
     if (mode == MODE_MENU)   DrawMenu();
     if (mode == MODE_RUMBLE) DrawRumble(p);
-    if (mode == MODE_DRIFT)  DrawDrift();
+    if (mode == MODE_DRIFT)  RestMeasure_Draw(g_Drift, "DRIFT TEST");
     if (mode == MODE_DRIFT_RESULT) DrawDriftResult(p);
 }
 
@@ -1117,6 +1097,10 @@ VOID __cdecl main()
             if (!DeadzoneUI_Update(p.state, p.prev, dt))
                 g_Mode = MODE_MENU;
             break;
+        case MODE_TRIGGER:
+            if (!TriggerUI_Update(p.state, p.prev, dt))
+                g_Mode = MODE_MENU;
+            break;
         }
         if (g_Mode != MODE_RUMBLE)
         {
@@ -1133,6 +1117,12 @@ VOID __cdecl main()
         if (g_Mode == MODE_DEADZONE)
         {
             DeadzoneUI_Draw(p.state);
+            R::EndFrame();
+            continue;
+        }
+        if (g_Mode == MODE_TRIGGER)
+        {
+            TriggerUI_Draw(p.state);
             R::EndFrame();
             continue;
         }
