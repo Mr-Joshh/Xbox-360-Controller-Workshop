@@ -178,15 +178,6 @@ THE GAME SEES** panel is live: the hollow ring is where your stick really is, th
 what the game gets and the orange disc is the dead zone. The thin ring is the dead zone most games
 already use on their own (about 24-27%); drift inside it usually doesn't show up in games anyway.
 
-| Button | Action |
-|---|---|
-| D-pad up/down | Choose a stick |
-| D-pad left/right | Make the dead zone smaller or bigger (OFF, 1-50%) |
-| Y | Measure drift: push both sticks each way as asked and let go; both sticks are set from the result (B cancels) |
-| X | Turn both dead zones off |
-| START | Save |
-| B | Back (asks first if you have unsaved changes) |
-
 ![Dead zone editor](docs/deadzone-editor.png)
 
 Good to know:
@@ -218,15 +209,6 @@ a smooth analog trigger. Press **Y** to measure: pull LT all the way and let go,
 press point is set just below the highest value each one reached, and the start point just above
 where it came to rest. The **WHAT THE GAME SEES** panel is live: the top bar of each trigger is the
 real value, the bottom bar is what the game gets, and it remembers the highest value you reached.
-
-| Button | Action |
-|---|---|
-| D-pad up/down | Choose a setting |
-| D-pad left/right | Change it (hold to speed up). Start point 0-100, full press 128-255 |
-| Y | Measure both triggers (B cancels) |
-| X | Back to the normal range (0-255) on both triggers |
-| START | Save |
-| B | Back (asks first if you have unsaved changes) |
 
 ![Trigger editor](docs/trigger-editor.png)
 
